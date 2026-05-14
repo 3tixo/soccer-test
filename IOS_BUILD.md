@@ -68,3 +68,11 @@ Once you have a signed `.ipa`, install it with SideStore:
 5. Keep LocalDevVPN enabled when installing or refreshing.
 
 With a free Apple account, sideloaded apps usually need refreshing every 7 days.
+
+## Widget Extension
+
+The iOS project includes a native `PitchPulseWidgetExtension` WidgetKit target. It shows a small/medium Home Screen widget with a Premier League match from ESPN.
+
+When installing with SideStore, keep app extensions enabled if SideStore asks. If the widget does not appear immediately, open the app once after installing, then long-press the Home Screen and add the PitchPulse widget.
+
+iOS controls how often widgets refresh, so this widget is not a real-time live ticker.
