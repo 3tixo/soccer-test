@@ -9,7 +9,13 @@
     <script defer src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
     <script defer src="app.js"></script>
   </head>
-  <body>
+  <body class="is-app-loading">
+    <div class="app-loader" id="appLoader" role="status" aria-live="polite">
+      <div class="loader-mark" aria-hidden="true"></div>
+      <strong>Loading PitchPulse</strong>
+      <span>Getting ESPN data ready</span>
+    </div>
+
     <div class="app-shell">
       <header class="topbar">
         <div>

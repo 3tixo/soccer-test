@@ -1,4 +1,5 @@
 const SITE_API = "https://site.api.espn.com/apis";
+const CORE_API = "https://sports.core.api.espn.com/v2/sports";
 
 const LEAGUES = [
   { id: "eng.1", name: "Premier League", country: "England", logo: "https://a.espncdn.com/i/leaguelogos/soccer/500/23.png" },
@@ -25,11 +26,15 @@ const state = {
   standings: null,
   news: null,
   selectedTeamId: null,
+  hasCompletedInitialLoad: false,
   summaryCache: new Map(),
+  competitionCache: new Map(),
   teamCache: new Map(),
 };
 
 const els = {
+  appLoader: document.querySelector("#appLoader"),
+  appShell: document.querySelector(".app-shell"),
   leagueStrip: document.querySelector("#leagueStrip"),
   leagueHero: document.querySelector("#leagueHero"),
   searchToggle: document.querySelector("#searchToggle"),
@@ -323,6 +328,7 @@ async function loadLeagueData(options = {}) {
     renderError(error);
   } finally {
     setLoading(false);
+    finishInitialLoad();
     hydrateIcons();
   }
 }
@@ -631,11 +637,28 @@ async function openMatch(eventId) {
   try {
     const cacheKey = `${state.leagueId}:${eventId}`;
     let summary = state.summaryCache.get(cacheKey);
+    let competition = state.competitionCache.get(cacheKey);
     if (!summary) {
-      summary = await fetchJson(`${SITE_API}/site/v2/sports/soccer/${state.leagueId}/summary?event=${eventId}`);
+      const competitionId = event.competitions?.[0]?.id || eventId;
+      const [summaryResult, competitionResult] = await Promise.allSettled([
+        fetchJson(`${SITE_API}/site/v2/sports/soccer/${state.leagueId}/summary?event=${eventId}`),
+        fetchJson(`${CORE_API}/soccer/leagues/${state.leagueId}/events/${eventId}/competitions/${competitionId}`),
+      ]);
+      if (summaryResult.status === "rejected") throw summaryResult.reason;
+      summary = summaryResult.value;
+      competition = unwrapResult(competitionResult);
       state.summaryCache.set(cacheKey, summary);
+      if (competition) state.competitionCache.set(cacheKey, competition);
+    } else if (!competition) {
+      const competitionId = event.competitions?.[0]?.id || eventId;
+      try {
+        competition = await fetchJson(`${CORE_API}/soccer/leagues/${state.leagueId}/events/${eventId}/competitions/${competitionId}`);
+        state.competitionCache.set(cacheKey, competition);
+      } catch {
+        competition = null;
+      }
     }
-    els.sheetContent.innerHTML = renderMatchSheet(event, summary);
+    els.sheetContent.innerHTML = renderMatchSheet(event, summary, competition);
   } catch (error) {
     els.sheetContent.innerHTML = `${renderSheetSkeleton(event)}${emptyState("Details unavailable", error.message)}`;
   } finally {
@@ -873,7 +896,7 @@ function renderSheetSkeleton(event) {
   `;
 }
 
-function renderMatchSheet(event, summary) {
+function renderMatchSheet(event, summary, competitionData = null) {
   const competition = event.competitions?.[0] ?? {};
   const teams = normalizeCompetitors(competition.competitors);
   const venue = summary?.gameInfo?.venue?.fullName || event.venue?.displayName || "Venue TBA";
@@ -890,7 +913,7 @@ function renderMatchSheet(event, summary) {
       ${renderOdds(summary?.odds, teams)}
       ${renderTimeline(timeline)}
       ${renderMatchStats(teamStats)}
-      ${renderLineups(summary?.rosters)}
+      ${renderLineups(summary?.rosters, competitionData)}
       ${renderTeamStats(teamStats)}
       ${renderRecentForm(form)}
       ${renderMatchNews(articles)}
@@ -974,7 +997,7 @@ function formatStatDisplay(value, suffix = "") {
   return text;
 }
 
-function renderLineups(rosters = []) {
+function renderLineups(rosters = [], competitionData = null) {
   const teams = rosters.filter((group) => group?.roster?.length);
   if (!teams.length) return "";
   const orderedTeams = [...teams].sort((a, b) => {
@@ -988,7 +1011,7 @@ function renderLineups(rosters = []) {
       <div class="lineup-terrain">
         ${renderFieldMarkings()}
         <div class="lineup-players-layer">
-          ${orderedTeams.map(renderLineupTeam).join("")}
+          ${orderedTeams.map((group) => renderLineupTeam(group, competitionData)).join("")}
         </div>
       </div>
       <div class="lineup-bench-list">
@@ -1049,10 +1072,14 @@ function renderFieldMarkings() {
   `;
 }
 
-function renderLineupTeam(group) {
+function renderLineupTeam(group, competitionData = null) {
   const starters = group.roster.filter((player) => player.starter);
   const rows = buildFormationRows(starters, group.formation);
   const side = group.homeAway === "home" ? "home" : "away";
+  const team = {
+    ...(group.team ?? {}),
+    uniform: getEventUniform(group, competitionData),
+  };
 
   return `
     <div class="team-lineup-half ${side}">
@@ -1060,30 +1087,31 @@ function renderLineupTeam(group) {
         <span>${escapeHtml(group.team?.abbreviation || "")}</span>
         <strong>${escapeHtml(group.formation || "TBA")}</strong>
       </div>
-      ${rows.map((row) => renderFormationRow(row, side)).join("")}
+      ${rows.map((row) => renderFormationRow(row, side, team)).join("")}
     </div>
   `;
 }
 
-function renderFormationRow(row, side) {
+function renderFormationRow(row, side, team) {
   return `
     <div class="formation-row ${side === "away" ? "row-reverse" : ""}" data-line="${escapeHtml(row.line)}">
-      ${row.players.map((player, index) => renderPlayerNode(player, row.line, index, row.players.length)).join("")}
+      ${row.players.map((player, index) => renderPlayerNode(player, row.line, index, row.players.length, team)).join("")}
     </div>
   `;
 }
 
-function renderPlayerNode(player, rowLine, index, count) {
+function renderPlayerNode(player, rowLine, index, count, team = {}) {
   const name = player.athlete?.shortName || player.athlete?.displayName || "Player";
-  const image = getPlayerImage(player);
   const position = getPlayerPositionLabel(player, rowLine, index, count);
   const rating = getPlayerRating(player);
+  const jersey = buildPlayerJersey(player, team);
 
   return `
     <div class="player-node">
-      <div class="player-avatar-wrap">
-        <span class="player-avatar player-avatar-fallback">${escapeHtml(getInitials(name))}</span>
-        ${image ? `<img class="player-avatar player-avatar-image" src="${image}" alt="" loading="lazy" onload="this.parentElement.classList.add('has-image')" onerror="this.remove()" />` : ""}
+      <div class="player-jersey-wrap" style="--jersey:${escapeHtml(jersey.primary)};--jersey-alt:${escapeHtml(jersey.accent)};--jersey-text:${escapeHtml(jersey.text)}">
+        <span class="player-jersey" aria-label="${escapeHtml(`${name} jersey ${jersey.number}`)}">
+          <span>${escapeHtml(jersey.number)}</span>
+        </span>
         ${rating ? `<span class="player-rating" style="background:${getRatingColor(rating)}">${escapeHtml(rating)}</span>` : ""}
       </div>
       <span class="player-position">${escapeHtml(position)}</span>
@@ -1310,14 +1338,44 @@ function getPositionSortWeight(player) {
   return order[label] ?? 8;
 }
 
-function getPlayerImage(player) {
-  return player.athlete?.headshot?.href
-    || (player.athlete?.id ? `https://a.espncdn.com/i/headshots/soccer/players/full/${player.athlete.id}.png` : "");
-}
-
 function getPlayerRating(player) {
   const rating = player.stats?.find((stat) => ["rating", "matchRating"].includes(stat.name))?.displayValue;
   return rating ? Number(rating).toFixed(1) : "";
+}
+
+function buildPlayerJersey(player, team = {}) {
+  const uniform = team.uniform ?? {};
+  const primary = normalizeHexColor(uniform.color || team.color, "1f8f55");
+  const accent = normalizeHexColor(uniform.alternateColor || team.alternateColor, "ffffff");
+  return {
+    number: player.jersey || player.athlete?.jersey || "-",
+    type: uniform.type || "",
+    primary: `#${primary}`,
+    accent: `#${accent}`,
+    text: getReadableTextColor(primary),
+  };
+}
+
+function getEventUniform(group, competitionData) {
+  const teamId = String(group.team?.id || group.id || "");
+  const homeAway = group.homeAway || "";
+  const competitor = (competitionData?.competitors ?? []).find((item) => {
+    return String(item.id || "") === teamId || (homeAway && item.homeAway === homeAway);
+  });
+  return competitor?.uniform ?? null;
+}
+
+function normalizeHexColor(value, fallback) {
+  const color = String(value || "").replace("#", "").trim();
+  return /^[0-9a-f]{6}$/i.test(color) ? color : fallback;
+}
+
+function getReadableTextColor(hex) {
+  const red = parseInt(hex.slice(0, 2), 16);
+  const green = parseInt(hex.slice(2, 4), 16);
+  const blue = parseInt(hex.slice(4, 6), 16);
+  const luminance = (0.299 * red + 0.587 * green + 0.114 * blue) / 255;
+  return luminance > 0.58 ? "#07130e" : "#ffffff";
 }
 
 function getRatingColor(rating) {
@@ -1727,7 +1785,15 @@ function emptyState(title, detail) {
 function setLoading(isLoading) {
   els.refreshButton.disabled = isLoading;
   els.refreshButton.style.opacity = isLoading ? "0.55" : "1";
+  els.appShell?.setAttribute("aria-busy", isLoading ? "true" : "false");
   els.syncLabel.textContent = isLoading ? "Loading ESPN" : els.syncLabel.textContent;
+}
+
+function finishInitialLoad() {
+  if (state.hasCompletedInitialLoad) return;
+  state.hasCompletedInitialLoad = true;
+  document.body.classList.remove("is-app-loading");
+  els.appLoader?.setAttribute("aria-hidden", "true");
 }
 
 function setSyncLabel() {
