@@ -8,8 +8,8 @@ enum ESPNError: Error {
 struct ESPNService {
     private let siteAPI = "https://site.api.espn.com/apis"
 
-    func fetchScoreboard(leagueId: String) async throws -> [ScoreEvent] {
-        let response: ScoreboardResponse = try await fetch("\(siteAPI)/site/v2/sports/soccer/\(leagueId)/scoreboard")
+    func fetchScoreboard(leagueId: String, date: Date) async throws -> [ScoreEvent] {
+        let response: ScoreboardResponse = try await fetch("\(siteAPI)/site/v2/sports/soccer/\(leagueId)/scoreboard?dates=\(Self.apiDate(date))")
         return response.events ?? []
     }
 
@@ -42,11 +42,20 @@ struct ESPNService {
 
         return try JSONDecoder().decode(T.self, from: data)
     }
+
+    static func apiDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyyMMdd"
+        return formatter.string(from: date)
+    }
 }
 
 @MainActor
 final class ScoreboardViewModel: ObservableObject {
     @Published var selectedLeague = nativeLeagues[0]
+    @Published var selectedDate = Date()
     @Published var activeTab: AppTab = .matches
     @Published var searchText = ""
     @Published var events: [ScoreEvent] = []
@@ -56,6 +65,14 @@ final class ScoreboardViewModel: ObservableObject {
     @Published var errorMessage: String?
 
     private let service = ESPNService()
+
+    var isToday: Bool {
+        Calendar.current.isDateInToday(selectedDate)
+    }
+
+    var dateLabel: String {
+        selectedDate.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
+    }
 
     var filteredEvents: [ScoreEvent] {
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -88,11 +105,39 @@ final class ScoreboardViewModel: ObservableObject {
         await load()
     }
 
+    func shiftDate(by days: Int) async {
+        selectedDate = Calendar.current.date(byAdding: .day, value: days, to: selectedDate) ?? selectedDate
+        await load()
+    }
+
+    func goToToday() async {
+        selectedDate = Date()
+        await load()
+    }
+
+    func teamContext(for team: Team?) -> TeamDetailContext? {
+        guard let team else { return nil }
+        let teamId = team.id
+        let teamName = team.bestName.lowercased()
+        let standing = standings.first { entry in
+            entry.team?.id == teamId || entry.team?.bestName.lowercased() == teamName
+        }
+        let teamEvents = events.filter { event in
+            (event.competition?.competitors ?? []).contains { competitor in
+                competitor.team?.id == teamId || competitor.team?.bestName.lowercased() == teamName
+            }
+        }
+        let teamArticles = articles.filter { article in
+            "\(article.headline ?? "") \(article.description ?? "")".lowercased().contains(teamName)
+        }
+        return TeamDetailContext(team: team, standing: standing, events: teamEvents, articles: teamArticles)
+    }
+
     func load() async {
         isLoading = true
         errorMessage = nil
 
-        async let eventResult = service.fetchScoreboard(leagueId: selectedLeague.id)
+        async let eventResult = service.fetchScoreboard(leagueId: selectedLeague.id, date: selectedDate)
         async let standingResult = service.fetchStandings(leagueId: selectedLeague.id)
         async let newsResult = service.fetchNews(leagueId: selectedLeague.id)
 
@@ -103,7 +148,7 @@ final class ScoreboardViewModel: ObservableObject {
         } catch {
             errorMessage = "Could not load all ESPN data."
             do {
-                events = try await service.fetchScoreboard(leagueId: selectedLeague.id)
+                events = try await service.fetchScoreboard(leagueId: selectedLeague.id, date: selectedDate)
             } catch {
                 events = []
             }

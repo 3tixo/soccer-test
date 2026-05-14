@@ -92,6 +92,10 @@ struct Team: Decodable {
     var bestLogo: String {
         logo ?? logos?.first?.href ?? ""
     }
+
+    var stableId: String {
+        id ?? displayName ?? shortDisplayName ?? name ?? UUID().uuidString
+    }
 }
 
 struct TeamLogo: Decodable {
@@ -188,6 +192,7 @@ struct MatchSummary: Decodable {
     let commentary: [CommentaryItem]?
     let boxscore: Boxscore?
     let news: NewsResponse?
+    let odds: [OddsItem]?
 }
 
 struct CommentaryItem: Decodable {
@@ -249,6 +254,82 @@ struct GameStatistic: Decodable {
         shortDisplayName = try container.decodeIfPresent(String.self, forKey: .shortDisplayName)
         displayValue = try container.decodeIfPresent(String.self, forKey: .displayValue)
         value = container.decodeFlexibleDouble(forKey: .value)
+    }
+}
+
+struct OddsItem: Decodable {
+    let provider: OddsProvider?
+    let header: OddsHeader?
+    let details: String?
+    let overUnder: FlexibleOddsValue?
+    let homeTeamOdds: TeamOdds?
+    let awayTeamOdds: TeamOdds?
+    let drawOdds: DrawOdds?
+    let moneyline: MoneylineMarket?
+}
+
+struct OddsProvider: Decodable {
+    let name: String?
+}
+
+struct OddsHeader: Decodable {
+    let text: String?
+}
+
+struct TeamOdds: Decodable {
+    let moneyLine: FlexibleOddsValue?
+    let odds: OddsSummary?
+}
+
+struct DrawOdds: Decodable {
+    let moneyLine: FlexibleOddsValue?
+    let summary: FlexibleOddsValue?
+}
+
+struct OddsSummary: Decodable {
+    let summary: FlexibleOddsValue?
+}
+
+struct MoneylineMarket: Decodable {
+    let home: MoneylineSide?
+    let away: MoneylineSide?
+    let draw: MoneylineSide?
+}
+
+struct MoneylineSide: Decodable {
+    let close: OddsClose?
+}
+
+struct OddsClose: Decodable {
+    let odds: FlexibleOddsValue?
+}
+
+enum FlexibleOddsValue: Decodable {
+    case number(Double)
+    case text(String)
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if let number = try? container.decode(Double.self) {
+            self = .number(number)
+            return
+        }
+        if let string = try? container.decode(String.self) {
+            self = .text(string)
+            return
+        }
+        self = .text("")
+    }
+}
+
+struct TeamDetailContext: Identifiable {
+    let team: Team
+    let standing: StandingEntry?
+    let events: [ScoreEvent]
+    let articles: [NewsArticle]
+
+    var id: String {
+        team.stableId
     }
 }
 

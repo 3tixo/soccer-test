@@ -4,6 +4,7 @@ struct ContentView: View {
     @StateObject private var viewModel = ScoreboardViewModel()
     @StateObject private var alertManager = MatchAlertManager()
     @State private var selectedEvent: ScoreEvent?
+    @State private var selectedTeam: TeamDetailContext?
 
     var body: some View {
         NavigationStack {
@@ -15,6 +16,7 @@ struct ContentView: View {
                         header
                         searchField
                         leagueStrip
+                        dateControls
                         hero
                         tabPicker
                         activeSection
@@ -34,6 +36,11 @@ struct ContentView: View {
             }
             .sheet(item: $selectedEvent) { event in
                 MatchDetailView(event: event, league: viewModel.selectedLeague)
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.visible)
+            }
+            .sheet(item: $selectedTeam) { context in
+                TeamDetailView(context: context, league: viewModel.selectedLeague)
                     .presentationDetents([.large])
                     .presentationDragIndicator(.visible)
             }
@@ -116,6 +123,61 @@ struct ContentView: View {
             }
         }
         .scrollIndicators(.hidden)
+    }
+
+    private var dateControls: some View {
+        HStack(spacing: 8) {
+            Button {
+                Task {
+                    await viewModel.shiftDate(by: -1)
+                    alertManager.refresh(events: viewModel.events, league: viewModel.selectedLeague)
+                }
+            } label: {
+                Image(systemName: "chevron.left")
+                    .font(.headline.weight(.black))
+                    .frame(width: 44, height: 44)
+            }
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(viewModel.isToday ? "Today" : "Match day")
+                    .font(.caption2.weight(.black))
+                    .foregroundStyle(.secondary)
+                Text(viewModel.dateLabel)
+                    .font(.subheadline.weight(.black))
+                    .foregroundStyle(.white)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 12)
+            .frame(height: 44)
+            .background(Color.pitchSurface)
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+            Button {
+                Task {
+                    await viewModel.goToToday()
+                    alertManager.refresh(events: viewModel.events, league: viewModel.selectedLeague)
+                }
+            } label: {
+                Text("Today")
+                    .font(.caption.weight(.black))
+                    .frame(height: 44)
+                    .padding(.horizontal, 12)
+            }
+            .disabled(viewModel.isToday)
+            .opacity(viewModel.isToday ? 0.5 : 1)
+
+            Button {
+                Task {
+                    await viewModel.shiftDate(by: 1)
+                    alertManager.refresh(events: viewModel.events, league: viewModel.selectedLeague)
+                }
+            } label: {
+                Image(systemName: "chevron.right")
+                    .font(.headline.weight(.black))
+                    .frame(width: 44, height: 44)
+            }
+        }
+        .buttonStyle(DateButtonStyle())
     }
 
     private var hero: some View {
@@ -220,7 +282,12 @@ struct ContentView: View {
             } else {
                 LazyVStack(spacing: 0) {
                     ForEach(Array(viewModel.filteredStandings.enumerated()), id: \.element.id) { index, entry in
-                        StandingRow(entry: entry, fallbackRank: index + 1)
+                        Button {
+                            selectedTeam = viewModel.teamContext(for: entry.team)
+                        } label: {
+                            StandingRow(entry: entry, fallbackRank: index + 1)
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
                 .background(Color.pitchSurface)
@@ -479,6 +546,15 @@ struct StateCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.pitchSurface)
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+}
+
+struct DateButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .foregroundStyle(.white)
+            .background(configuration.isPressed ? Color.pitchCard : Color.pitchSurface)
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 }
 

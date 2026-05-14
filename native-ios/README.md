@@ -42,10 +42,11 @@ Current native features:
 - Match timeline when ESPN summary data exists
 - Match stats when ESPN box score data exists
 - Native kickoff notification scheduling
+- Previous / next / today date controls
+- Team detail sheet from standings
+- Decimal odds display in match details when ESPN returns odds
 
 Still to port from the web app:
 
 - Native lineup pitch
-- Team pages
-- Odds display
 - Native WidgetKit target wired into this new native app

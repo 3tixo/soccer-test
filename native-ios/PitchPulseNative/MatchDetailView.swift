@@ -29,6 +29,7 @@ struct MatchDetailView: View {
                         StateCard(title: "Details unavailable", detail: errorMessage)
                     }
 
+                    oddsBlock
                     timelineBlock
                     statsBlock
                     newsBlock
@@ -108,6 +109,17 @@ struct MatchDetailView: View {
                         TimelineRow(event: item)
                     }
                 }
+            }
+        }
+    }
+
+    private var oddsBlock: some View {
+        let odds = pickedOdds
+        return DetailBlock(title: "Odds") {
+            if let odds, odds.hasDisplayableMoneyline {
+                OddsBoard(odds: odds, event: event)
+            } else {
+                StateCard(title: "No odds", detail: "ESPN did not return odds for this match.")
             }
         }
     }
@@ -202,6 +214,20 @@ struct MatchDetailView: View {
                 awayValue: away.numericValue
             )
         }
+    }
+
+    private var pickedOdds: OddsItem? {
+        let items = (summary?.odds ?? []).filter(\.hasDisplayableMoneyline)
+        let named: (String) -> OddsItem? = { needle in
+            items.first { item in
+                item.providerName.lowercased().contains(needle)
+            }
+        }
+
+        return named("bet 365")
+            ?? named("bet365")
+            ?? items.first { !$0.providerName.lowercased().contains("draftkings") }
+            ?? items.first
     }
 
     private func loadSummary() async {
@@ -339,5 +365,100 @@ struct MatchStatRow: View {
             }
             .frame(height: 5)
         }
+    }
+}
+
+struct OddsBoard: View {
+    let odds: OddsItem
+    let event: ScoreEvent
+
+    private var teams: MatchTeams {
+        event.matchTeams
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text(odds.providerName)
+                    .font(.caption.weight(.black))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                if odds.providerName.lowercased().contains("bet365") || odds.providerName.lowercased().contains("bet 365") {
+                    Text("bet365")
+                        .font(.caption.weight(.black))
+                        .foregroundStyle(Color.pitchAccent)
+                }
+            }
+
+            HStack(spacing: 8) {
+                oddsCell(label: teams.home?.team?.abbreviation ?? "Home", value: odds.homeDecimal)
+                oddsCell(label: "Draw", value: odds.drawDecimal)
+                oddsCell(label: teams.away?.team?.abbreviation ?? "Away", value: odds.awayDecimal)
+            }
+
+            if let details = odds.details, !details.isEmpty {
+                Text(details)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+        }
+    }
+
+    private func oddsCell(label: String, value: String) -> some View {
+        VStack(spacing: 5) {
+            Text(label)
+                .font(.caption2.weight(.black))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+            Text(value.isEmpty ? "-" : value)
+                .font(.headline.weight(.black))
+                .foregroundStyle(.white)
+                .monospacedDigit()
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity)
+        .background(Color.white.opacity(0.06))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+}
+
+extension OddsItem {
+    var providerName: String {
+        provider?.name ?? header?.text ?? "Odds"
+    }
+
+    var homeDecimal: String {
+        firstDecimal([
+            moneyline?.home?.close?.odds,
+            homeTeamOdds?.moneyLine,
+            homeTeamOdds?.odds?.summary
+        ])
+    }
+
+    var awayDecimal: String {
+        firstDecimal([
+            moneyline?.away?.close?.odds,
+            awayTeamOdds?.moneyLine,
+            awayTeamOdds?.odds?.summary
+        ])
+    }
+
+    var drawDecimal: String {
+        firstDecimal([
+            moneyline?.draw?.close?.odds,
+            drawOdds?.moneyLine,
+            drawOdds?.summary
+        ])
+    }
+
+    var hasDisplayableMoneyline: Bool {
+        !homeDecimal.isEmpty || !awayDecimal.isEmpty || !drawDecimal.isEmpty
+    }
+
+    private func firstDecimal(_ values: [FlexibleOddsValue?]) -> String {
+        values
+            .map(decimalOdds)
+            .first { !$0.isEmpty } ?? ""
     }
 }
