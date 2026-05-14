@@ -8,9 +8,9 @@ enum ESPNError: Error {
 struct ESPNService {
     private let siteAPI = "https://site.api.espn.com/apis"
 
-    func fetchScoreboard(leagueId: String, date: Date) async throws -> [ScoreEvent] {
-        let response: ScoreboardResponse = try await fetch("\(siteAPI)/site/v2/sports/soccer/\(leagueId)/scoreboard?dates=\(Self.apiDate(date))")
-        return response.events ?? []
+    func fetchScoreboard(leagueId: String, date: Date, useEspnDefaultDate: Bool) async throws -> ScoreboardResponse {
+        let dateQuery = useEspnDefaultDate ? "" : "?dates=\(Self.apiDate(date))"
+        return try await fetch("\(siteAPI)/site/v2/sports/soccer/\(leagueId)/scoreboard\(dateQuery)")
     }
 
     func fetchStandings(leagueId: String) async throws -> [StandingEntry] {
@@ -50,12 +50,22 @@ struct ESPNService {
         formatter.dateFormat = "yyyyMMdd"
         return formatter.string(from: date)
     }
+
+    static func dateFromAPIDay(_ value: String?) -> Date? {
+        guard let value else { return nil }
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.date(from: value)
+    }
 }
 
 @MainActor
 final class ScoreboardViewModel: ObservableObject {
     @Published var selectedLeague = nativeLeagues[0]
     @Published var selectedDate = Date()
+    @Published var hasUserPickedDate = false
     @Published var activeTab: AppTab = .matches
     @Published var searchText = ""
     @Published var events: [ScoreEvent] = []
@@ -101,18 +111,21 @@ final class ScoreboardViewModel: ObservableObject {
 
     func select(_ league: League) async {
         selectedLeague = league
+        hasUserPickedDate = false
         searchText = ""
-        await load()
+        await load(useEspnDefaultDate: true)
     }
 
     func shiftDate(by days: Int) async {
         selectedDate = Calendar.current.date(byAdding: .day, value: days, to: selectedDate) ?? selectedDate
-        await load()
+        hasUserPickedDate = true
+        await load(useEspnDefaultDate: false)
     }
 
     func goToToday() async {
         selectedDate = Date()
-        await load()
+        hasUserPickedDate = true
+        await load(useEspnDefaultDate: false)
     }
 
     func teamContext(for team: Team?) -> TeamDetailContext? {
@@ -133,22 +146,39 @@ final class ScoreboardViewModel: ObservableObject {
         return TeamDetailContext(team: team, standing: standing, events: teamEvents, articles: teamArticles)
     }
 
-    func load() async {
+    func load(useEspnDefaultDate: Bool? = nil) async {
         isLoading = true
         errorMessage = nil
+        let shouldUseDefaultDate = useEspnDefaultDate ?? !hasUserPickedDate
 
-        async let eventResult = service.fetchScoreboard(leagueId: selectedLeague.id, date: selectedDate)
+        async let scoreboardResult = service.fetchScoreboard(
+            leagueId: selectedLeague.id,
+            date: selectedDate,
+            useEspnDefaultDate: shouldUseDefaultDate
+        )
         async let standingResult = service.fetchStandings(leagueId: selectedLeague.id)
         async let newsResult = service.fetchNews(leagueId: selectedLeague.id)
 
         do {
-            events = try await eventResult
+            let scoreboard = try await scoreboardResult
+            events = scoreboard.events ?? []
+            if shouldUseDefaultDate, let espnDate = ESPNService.dateFromAPIDay(scoreboard.day?.date) {
+                selectedDate = espnDate
+            }
             standings = try await standingResult
             articles = try await newsResult
         } catch {
             errorMessage = "Could not load all ESPN data."
             do {
-                events = try await service.fetchScoreboard(leagueId: selectedLeague.id, date: selectedDate)
+                let scoreboard = try await service.fetchScoreboard(
+                    leagueId: selectedLeague.id,
+                    date: selectedDate,
+                    useEspnDefaultDate: shouldUseDefaultDate
+                )
+                events = scoreboard.events ?? []
+                if shouldUseDefaultDate, let espnDate = ESPNService.dateFromAPIDay(scoreboard.day?.date) {
+                    selectedDate = espnDate
+                }
             } catch {
                 events = []
             }

@@ -32,6 +32,7 @@ struct MatchDetailView: View {
                     oddsBlock
                     timelineBlock
                     statsBlock
+                    lineupsBlock
                     newsBlock
                 }
                 .padding(16)
@@ -136,6 +137,12 @@ struct MatchDetailView: View {
                     }
                 }
             }
+        }
+    }
+
+    private var lineupsBlock: some View {
+        DetailBlock(title: "Lineups") {
+            LineupView(groups: summary?.rosters ?? [])
         }
     }
 

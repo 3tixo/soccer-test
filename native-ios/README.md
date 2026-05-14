@@ -45,8 +45,9 @@ Current native features:
 - Previous / next / today date controls
 - Team detail sheet from standings
 - Decimal odds display in match details when ESPN returns odds
+- Native lineup pitch with formation rows, player numbers, position labels, ratings, and bench lists
+- League switching uses ESPN's default match day for each league until the user manually picks a date
 
 Still to port from the web app:
 
-- Native lineup pitch
 - Native WidgetKit target wired into this new native app

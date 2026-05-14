@@ -50,9 +50,6 @@ struct ContentView: View {
     private var header: some View {
         HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 3) {
-                Text("SOCCER LIVE CENTER")
-                    .font(.caption2.weight(.black))
-                    .foregroundStyle(Color.pitchAccent)
                 Text("PitchPulse")
                     .font(.system(size: 32, weight: .black, design: .rounded))
                     .foregroundStyle(.white)

@@ -601,11 +601,53 @@ async function loadLeagueData(options = {}) {
     }
   } finally {
     if (!options.silent) {
+      hydrateIcons();
+      await waitForInitialVisuals();
       setLoading(false);
       finishInitialLoad();
     }
     hydrateIcons();
   }
+}
+
+async function waitForInitialVisuals() {
+  if (state.hasCompletedInitialLoad) return;
+
+  await nextFrame();
+  const images = [...els.appShell.querySelectorAll("img")]
+    .filter((image) => image.src || image.currentSrc)
+    .slice(0, 36);
+
+  const imageSettles = images.map(waitForImage);
+  await Promise.race([
+    Promise.all(imageSettles),
+    delay(2800),
+  ]);
+  await nextFrame();
+}
+
+function waitForImage(image) {
+  if (image.complete) {
+    return image.decode?.().catch(() => {}) ?? Promise.resolve();
+  }
+
+  return new Promise((resolve) => {
+    const done = () => {
+      image.removeEventListener("load", done);
+      image.removeEventListener("error", done);
+      resolve();
+    };
+    image.addEventListener("load", done, { once: true });
+    image.addEventListener("error", done, { once: true });
+  });
+}
+
+function delay(ms) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+function nextFrame() {
+  return new Promise((resolve) => window.requestAnimationFrame(() => resolve()));
 }
 
 function unwrapResult(result) {

@@ -26,7 +26,12 @@ enum AppTab: String, CaseIterable, Identifiable {
 }
 
 struct ScoreboardResponse: Decodable {
+    let day: ScoreboardDay?
     let events: [ScoreEvent]?
+}
+
+struct ScoreboardDay: Decodable {
+    let date: String?
 }
 
 struct ScoreEvent: Identifiable, Decodable {
@@ -193,6 +198,7 @@ struct MatchSummary: Decodable {
     let boxscore: Boxscore?
     let news: NewsResponse?
     let odds: [OddsItem]?
+    let rosters: [RosterGroup]?
 }
 
 struct CommentaryItem: Decodable {
@@ -333,6 +339,75 @@ struct TeamDetailContext: Identifiable {
     }
 }
 
+struct RosterGroup: Decodable, Identifiable {
+    let team: Team?
+    let homeAway: String?
+    let formation: String?
+    let roster: [RosterPlayer]?
+
+    var id: String {
+        "\(homeAway ?? "side")-\(team?.stableId ?? UUID().uuidString)"
+    }
+}
+
+struct RosterPlayer: Decodable, Identifiable {
+    let athlete: Athlete?
+    let jersey: String?
+    let starter: Bool?
+    let position: PlayerPosition?
+    let formationPlace: Int?
+    let subbedIn: Bool?
+    let subbedOut: Bool?
+    let stats: [GameStatistic]?
+
+    var id: String {
+        athlete?.id ?? "\(athlete?.displayName ?? "player")-\(jersey ?? "")"
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case athlete
+        case jersey
+        case starter
+        case position
+        case formationPlace
+        case subbedIn
+        case subbedOut
+        case stats
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        athlete = try container.decodeIfPresent(Athlete.self, forKey: .athlete)
+        jersey = try container.decodeIfPresent(String.self, forKey: .jersey)
+        starter = try container.decodeIfPresent(Bool.self, forKey: .starter)
+        position = try container.decodeIfPresent(PlayerPosition.self, forKey: .position)
+        formationPlace = container.decodeFlexibleInt(forKey: .formationPlace)
+        subbedIn = try container.decodeIfPresent(Bool.self, forKey: .subbedIn)
+        subbedOut = try container.decodeIfPresent(Bool.self, forKey: .subbedOut)
+        stats = try container.decodeIfPresent([GameStatistic].self, forKey: .stats)
+    }
+}
+
+struct Athlete: Decodable {
+    let id: String?
+    let displayName: String?
+    let shortName: String?
+    let headshot: Headshot?
+
+    var bestName: String {
+        shortName ?? displayName ?? "Player"
+    }
+}
+
+struct Headshot: Decodable {
+    let href: String?
+}
+
+struct PlayerPosition: Decodable {
+    let abbreviation: String?
+    let displayName: String?
+}
+
 extension KeyedDecodingContainer {
     func decodeFlexibleDouble(forKey key: Key) -> Double? {
         if let value = try? decodeIfPresent(Double.self, forKey: key) {
@@ -343,6 +418,19 @@ extension KeyedDecodingContainer {
         }
         if let value = try? decodeIfPresent(String.self, forKey: key) {
             return Double(value.replacingOccurrences(of: "%", with: ""))
+        }
+        return nil
+    }
+
+    func decodeFlexibleInt(forKey key: Key) -> Int? {
+        if let value = try? decodeIfPresent(Int.self, forKey: key) {
+            return value
+        }
+        if let value = try? decodeIfPresent(Double.self, forKey: key) {
+            return Int(value)
+        }
+        if let value = try? decodeIfPresent(String.self, forKey: key) {
+            return Int(value)
         }
         return nil
     }
