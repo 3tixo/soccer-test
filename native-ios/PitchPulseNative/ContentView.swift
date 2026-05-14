@@ -647,8 +647,8 @@ func cardStroke(_ radius: CGFloat) -> some View {
 }
 
 extension Color {
-    static let pitchBackground = Color(red: 0.03, green: 0.08, blue: 0.06)
-    static let pitchSurface = Color(red: 0.07, green: 0.15, blue: 0.11)
-    static let pitchCard = Color(red: 0.04, green: 0.18, blue: 0.14)
-    static let pitchAccent = Color(red: 0.18, green: 0.89, blue: 0.56)
+    static let pitchBackground = Color(red: 0.02, green: 0.02, blue: 0.025)
+    static let pitchSurface = Color(red: 0.075, green: 0.078, blue: 0.085)
+    static let pitchCard = Color(red: 0.105, green: 0.108, blue: 0.118)
+    static let pitchAccent = Color(red: 0.78, green: 0.80, blue: 0.84)
 }

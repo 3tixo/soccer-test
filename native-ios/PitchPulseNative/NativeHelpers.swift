@@ -222,17 +222,43 @@ private func normalizePositionLabel(_ abbreviation: String?, displayName: String
         .replacingOccurrences(of: "-", with: "")
 
     let mapped = [
+        "G": "GK",
+        "KEEPER": "GK",
+        "GOALIE": "GK",
         "GOALKEEPER": "GK",
+        "D": "CB",
+        "DF": "CB",
         "DEFENDER": "CB",
+        "M": "CM",
+        "MF": "CM",
         "MIDFIELDER": "CM",
+        "F": "ST",
+        "FW": "ST",
         "FORWARD": "ST",
         "STRIKER": "ST",
         "LEFTBACK": "LB",
         "RIGHTBACK": "RB",
+        "FULLBACK": "CB",
         "CENTERBACK": "CB",
         "CENTREBACK": "CB",
+        "CENTRALDEFENDER": "CB",
+        "LEFTCENTERBACK": "LCB",
+        "LEFTCENTREBACK": "LCB",
+        "RIGHTCENTERBACK": "RCB",
+        "RIGHTCENTREBACK": "RCB",
+        "LEFTWINGBACK": "LWB",
+        "RIGHTWINGBACK": "RWB",
+        "DM": "CDM",
         "DEFENSIVEMIDFIELDER": "CDM",
-        "ATTACKINGMIDFIELDER": "CAM"
+        "AM": "CAM",
+        "ATTACKINGMIDFIELDER": "CAM",
+        "LEFTMIDFIELDER": "LM",
+        "RIGHTMIDFIELDER": "RM",
+        "LEFTWINGER": "LW",
+        "RIGHTWINGER": "RW",
+        "WINGER": "RW",
+        "CENTREFORWARD": "ST",
+        "CENTERFORWARD": "ST"
     ]
 
     return mapped[value] ?? value
@@ -323,12 +349,12 @@ extension Color {
         self.init(red: red, green: green, blue: blue)
     }
 
-    static let pitchInk = Color(red: 0.02, green: 0.04, blue: 0.04)
+    static let pitchInk = Color(red: 0.01, green: 0.011, blue: 0.014)
 }
 
 extension Team {
     var lineupPrimaryColor: Color {
-        Color(hex: color) ?? Color.pitchAccent.opacity(0.82)
+        Color(hex: color) ?? Color.white.opacity(0.28)
     }
 
     var lineupSecondaryColor: Color {
@@ -340,8 +366,8 @@ struct AppBackground: View {
     var body: some View {
         LinearGradient(
             colors: [
-                Color(red: 0.02, green: 0.07, blue: 0.05),
-                Color(red: 0.04, green: 0.11, blue: 0.08),
+                Color(red: 0.015, green: 0.016, blue: 0.020),
+                Color(red: 0.055, green: 0.058, blue: 0.066),
                 Color.pitchInk
             ],
             startPoint: .topLeading,

@@ -247,64 +247,113 @@ struct NativeWidgetView: View {
     let entry: NativeWidgetEntry
 
     var body: some View {
-        VStack(alignment: .leading, spacing: family == .systemSmall ? 7 : 10) {
+        Group {
+            if family == .systemMedium {
+                mediumLayout
+            } else {
+                smallLayout
+            }
+        }
+        .foregroundStyle(.white)
+        .modifier(WidgetBackground())
+    }
+
+    private var smallLayout: some View {
+        VStack(alignment: .leading, spacing: 7) {
             HStack(spacing: 6) {
-                Text("PitchPulse")
+                Text("PULSE")
                     .font(.caption2.weight(.black))
-                    .foregroundStyle(Color(red: 0.18, green: 0.89, blue: 0.56))
+                    .foregroundStyle(.white.opacity(0.66))
                 Spacer(minLength: 4)
                 statusBadge
             }
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(entry.league.uppercased())
-                    .font(.caption2.weight(.black))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                Text(entry.mode)
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(.white.opacity(0.72))
-                    .lineLimit(1)
-            }
+            Text(entry.league.uppercased())
+                .font(.caption2.weight(.black))
+                .foregroundStyle(.white.opacity(0.48))
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
+
+            Text(entry.score)
+                .font(.system(size: 30, weight: .black, design: .rounded))
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.62)
+                .frame(maxWidth: .infinity, alignment: .leading)
 
             Spacer(minLength: 0)
 
-            HStack(alignment: .center, spacing: 8) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(entry.home)
-                        .font(.headline.weight(.black))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.75)
-                    Text(entry.away)
-                        .font(.headline.weight(.black))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.75)
-                }
-                Spacer(minLength: 4)
-                Text(entry.score)
-                    .font(.system(size: family == .systemSmall ? 24 : 32, weight: .black, design: .rounded))
-                    .monospacedDigit()
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
+            VStack(alignment: .leading, spacing: 3) {
+                teamText(entry.home, size: 14)
+                teamText(entry.away, size: 14)
             }
         }
+        .padding(13)
+    }
+
+    private var mediumLayout: some View {
+        HStack(alignment: .center, spacing: 14) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 6) {
+                    Text("PitchPulse")
+                        .font(.caption.weight(.black))
+                        .foregroundStyle(.white.opacity(0.72))
+                    statusBadge
+                }
+
+                Text(entry.league.uppercased())
+                    .font(.caption2.weight(.black))
+                    .foregroundStyle(.white.opacity(0.48))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+
+                Text(entry.mode)
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(.white.opacity(0.62))
+                    .lineLimit(1)
+
+                Spacer(minLength: 0)
+
+                VStack(alignment: .leading, spacing: 5) {
+                    teamText(entry.home, size: 17)
+                    teamText(entry.away, size: 17)
+                }
+            }
+
+            Spacer(minLength: 4)
+
+            Text(entry.score)
+                .font(.system(size: 38, weight: .black, design: .rounded))
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.55)
+                .frame(minWidth: 82, alignment: .trailing)
+        }
         .padding(14)
-        .foregroundStyle(.white)
-        .modifier(WidgetBackground())
+    }
+
+    private func teamText(_ value: String, size: CGFloat) -> some View {
+        Text(value)
+            .font(.system(size: size, weight: .black, design: .rounded))
+            .lineLimit(1)
+            .minimumScaleFactor(0.58)
     }
 
     private var statusBadge: some View {
         Text(entry.status)
             .font(.caption2.weight(.black))
-            .foregroundStyle(entry.isLive ? .white : .secondary)
+            .foregroundStyle(entry.isLive ? .white : .white.opacity(0.56))
             .lineLimit(1)
-            .padding(.horizontal, entry.isLive ? 7 : 0)
-            .frame(height: entry.isLive ? CGFloat(20) : nil)
+            .minimumScaleFactor(0.72)
+            .padding(.horizontal, entry.isLive ? 7 : 6)
+            .frame(height: CGFloat(20))
             .background {
-                if entry.isLive {
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(Color.red.opacity(0.92))
-                }
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(entry.isLive ? Color.red.opacity(0.92) : Color.white.opacity(0.08))
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .stroke(Color.white.opacity(0.10), lineWidth: 1)
             }
     }
 }
@@ -316,8 +365,8 @@ struct WidgetBackground: ViewModifier {
             content.containerBackground(
                 LinearGradient(
                     colors: [
-                        Color(red: 0.03, green: 0.08, blue: 0.06),
-                        Color(red: 0.06, green: 0.13, blue: 0.10)
+                        Color(red: 0.015, green: 0.016, blue: 0.020),
+                        Color(red: 0.075, green: 0.078, blue: 0.086)
                     ],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
@@ -325,7 +374,7 @@ struct WidgetBackground: ViewModifier {
                 for: .widget
             )
         } else {
-            content.background(Color(red: 0.03, green: 0.08, blue: 0.06))
+            content.background(Color(red: 0.015, green: 0.016, blue: 0.020))
         }
     }
 }
