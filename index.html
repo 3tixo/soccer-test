@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#07130e" />
+    <title>PitchPulse - Soccer Scores</title>
+    <link rel="stylesheet" href="styles.css" />
+    <script defer src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+    <script defer src="app.js"></script>
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Soccer live center</p>
+          <h1>PitchPulse</h1>
+        </div>
+        <div class="top-actions">
+          <button class="icon-button" id="searchToggle" aria-label="Search leagues">
+            <i data-lucide="search"></i>
+          </button>
+          <button class="icon-button" id="refreshButton" aria-label="Refresh scores">
+            <i data-lucide="rotate-cw"></i>
+          </button>
+        </div>
+      </header>
+
+      <section class="search-panel" id="searchPanel" hidden>
+        <label for="leagueSearch">Search competitions and teams</label>
+        <input id="leagueSearch" type="search" placeholder="Arsenal, Barcelona, MLS..." autocomplete="off" />
+        <div class="search-results" id="searchResults"></div>
+      </section>
+
+      <nav class="league-strip" id="leagueStrip" aria-label="Competitions"></nav>
+
+      <section class="date-rail" aria-label="Match date controls">
+        <button class="icon-button" id="prevDate" aria-label="Previous day">
+          <i data-lucide="chevron-left"></i>
+        </button>
+        <button class="date-pill" id="datePickerButton" type="button">
+          <span id="dateKicker">Match day</span>
+          <strong id="dateLabel">Loading...</strong>
+        </button>
+        <input class="visually-hidden" id="nativeDatePicker" type="date" />
+        <button class="text-button" id="todayButton" type="button">Today</button>
+        <button class="icon-button" id="nextDate" aria-label="Next day">
+          <i data-lucide="chevron-right"></i>
+        </button>
+      </section>
+
+      <main class="content">
+        <section class="league-hero" id="leagueHero"></section>
+
+        <section class="panel active" id="matchesPanel" aria-labelledby="matchesTab">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Fixtures</p>
+              <h2 id="matchesTitle">Matches</h2>
+            </div>
+            <span class="sync-label" id="syncLabel">Waiting for ESPN</span>
+          </div>
+          <div class="feed" id="matchesList"></div>
+        </section>
+
+        <section class="panel" id="standingsPanel" aria-labelledby="standingsTab">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Table</p>
+              <h2 id="standingsTitle">Standings</h2>
+            </div>
+          </div>
+          <div class="table-wrap" id="standingsList"></div>
+        </section>
+
+        <section class="panel" id="newsPanel" aria-labelledby="newsTab">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Latest</p>
+              <h2 id="newsTitle">News</h2>
+            </div>
+          </div>
+          <div class="news-list" id="newsList"></div>
+        </section>
+      </main>
+
+      <nav class="bottom-tabs" aria-label="Primary">
+        <button class="tab-button active" id="matchesTab" data-tab="matches" type="button">
+          <i data-lucide="panel-top"></i>
+          <span>Matches</span>
+        </button>
+        <button class="tab-button" id="standingsTab" data-tab="standings" type="button">
+          <i data-lucide="table-2"></i>
+          <span>Table</span>
+        </button>
+        <button class="tab-button" id="newsTab" data-tab="news" type="button">
+          <i data-lucide="newspaper"></i>
+          <span>News</span>
+        </button>
+      </nav>
+    </div>
+
+    <aside class="match-sheet" id="matchSheet" aria-modal="true" role="dialog" aria-labelledby="sheetTitle" hidden>
+      <div class="sheet-backdrop" id="sheetBackdrop"></div>
+      <div class="sheet-card">
+        <div class="sheet-handle"></div>
+        <button class="icon-button sheet-close" id="sheetClose" aria-label="Close match details">
+          <i data-lucide="x"></i>
+        </button>
+        <div id="sheetContent"></div>
+      </div>
+    </aside>
+  </body>
+</html>
