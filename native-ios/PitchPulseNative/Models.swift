@@ -48,6 +48,7 @@ struct ScoreEvent: Identifiable, Decodable {
 }
 
 struct EventStatus: Decodable {
+    let displayClock: String?
     let type: StatusType?
 }
 
@@ -79,6 +80,27 @@ struct Competitor: Decodable, Identifiable {
     var stableId: String {
         id ?? team?.id ?? "\(homeAway ?? "team")-\(team?.displayName ?? UUID().uuidString)"
     }
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case homeAway
+        case score
+        case winner
+        case team
+        case records
+        case record
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(String.self, forKey: .id)
+        homeAway = try container.decodeIfPresent(String.self, forKey: .homeAway)
+        score = container.decodeFlexibleScore(forKey: .score)
+        winner = try container.decodeIfPresent(Bool.self, forKey: .winner)
+        team = try container.decodeIfPresent(Team.self, forKey: .team)
+        records = (try? container.decodeIfPresent([TeamRecord].self, forKey: .records))
+            ?? (try? container.decodeIfPresent([TeamRecord].self, forKey: .record))
+    }
 }
 
 struct Team: Decodable {
@@ -91,6 +113,37 @@ struct Team: Decodable {
     let logos: [TeamLogo]?
     let color: String?
     let alternateColor: String?
+    let recordSummary: String?
+    let standingSummary: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case displayName
+        case shortDisplayName
+        case name
+        case abbreviation
+        case logo
+        case logos
+        case color
+        case alternateColor
+        case recordSummary
+        case standingSummary
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(String.self, forKey: .id)
+        displayName = try container.decodeIfPresent(String.self, forKey: .displayName)
+        shortDisplayName = try container.decodeIfPresent(String.self, forKey: .shortDisplayName)
+        name = try container.decodeIfPresent(String.self, forKey: .name)
+        abbreviation = try container.decodeIfPresent(String.self, forKey: .abbreviation)
+        logo = try? container.decodeIfPresent(String.self, forKey: .logo)
+        logos = try? container.decodeIfPresent([TeamLogo].self, forKey: .logos)
+        color = try container.decodeIfPresent(String.self, forKey: .color)
+        alternateColor = try container.decodeIfPresent(String.self, forKey: .alternateColor)
+        recordSummary = try container.decodeIfPresent(String.self, forKey: .recordSummary)
+        standingSummary = try container.decodeIfPresent(String.self, forKey: .standingSummary)
+    }
 
     var bestName: String {
         shortDisplayName ?? displayName ?? name ?? "TBA"
@@ -111,6 +164,7 @@ struct TeamLogo: Decodable {
 
 struct TeamRecord: Decodable {
     let summary: String?
+    let displayValue: String?
 }
 
 struct StandingsResponse: Decodable {
@@ -445,4 +499,25 @@ extension KeyedDecodingContainer {
         }
         return nil
     }
+
+    func decodeFlexibleScore(forKey key: Key) -> String? {
+        if let value = try? decodeIfPresent(String.self, forKey: key) {
+            return value
+        }
+        if let value = try? decodeIfPresent(Int.self, forKey: key) {
+            return String(value)
+        }
+        if let value = try? decodeIfPresent(Double.self, forKey: key) {
+            return String(Int(value))
+        }
+        if let value = try? decodeIfPresent(ScoreObject.self, forKey: key) {
+            return value.displayValue ?? value.value.map { String(Int($0)) }
+        }
+        return nil
+    }
+}
+
+private struct ScoreObject: Decodable {
+    let value: Double?
+    let displayValue: String?
 }

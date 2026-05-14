@@ -48,11 +48,12 @@ Current native features:
 - Native lineup pitch with formation rows, player numbers, position labels, ratings, and bench lists
 - League switching uses ESPN's default match day for each league until the user manually picks a date
 - Native WidgetKit target embedded in the SwiftUI app
+- Configurable widget: edit the widget on iOS to choose league and Live first / Next match / Latest result
 - Persistent favorite teams and favorite-match filtering
 - Team pages fetch ESPN profile, schedule, and team news
 - Match details use segmented tabs for Summary, Stats, Lineups, Odds, and News
 
 Still to port from the web app:
 
-- Widget favorite-team configuration
+- Widget favorite-team configuration through an App Group or AppIntent entity picker
 - Favorite-only notification scheduling

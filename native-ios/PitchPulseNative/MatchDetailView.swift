@@ -58,11 +58,19 @@ struct MatchDetailView: View {
                         .font(.system(size: 34, weight: .black, design: .rounded))
                         .foregroundStyle(.white)
                         .monospacedDigit()
-                    Text(event.status?.type?.shortDetail ?? event.status?.type?.description ?? "Scheduled")
+                    Text(event.status?.statusPillText ?? "Scheduled")
                         .font(.caption.weight(.black))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(event.status?.isLive == true ? .white : .secondary)
                         .lineLimit(2)
                         .multilineTextAlignment(.center)
+                        .padding(.horizontal, event.status?.isLive == true ? 8 : 0)
+                        .frame(height: event.status?.isLive == true ? CGFloat(24) : nil)
+                        .background {
+                            if event.status?.isLive == true {
+                                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                    .fill(Color.red.opacity(0.92))
+                            }
+                        }
                 }
                 .frame(minWidth: 86)
 

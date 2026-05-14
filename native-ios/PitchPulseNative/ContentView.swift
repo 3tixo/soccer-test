@@ -207,7 +207,7 @@ struct ContentView: View {
 
             HStack(spacing: 10) {
                 stat(label: "Matches", value: "\(viewModel.events.count)")
-                stat(label: "Live", value: "\(viewModel.events.filter { $0.status?.type?.state == "in" }.count)")
+                stat(label: "Live", value: "\(viewModel.events.filter { $0.status?.isLive == true }.count)", tint: .red)
                 stat(label: "Teams", value: "\(viewModel.standings.count)")
             }
         }
@@ -218,14 +218,14 @@ struct ContentView: View {
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
-    private func stat(label: String, value: String) -> some View {
+    private func stat(label: String, value: String, tint: Color = Color.pitchAccent) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(label.uppercased())
                 .font(.caption2.weight(.black))
                 .foregroundStyle(.secondary)
             Text(value)
                 .font(.headline.weight(.black))
-                .foregroundStyle(.white)
+                .foregroundStyle(label == "Live" && value != "0" ? tint : .white)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
         }
@@ -378,10 +378,7 @@ struct MatchCard: View {
                     .font(.caption.weight(.black))
                     .foregroundStyle(.secondary)
                 Spacer()
-                Text(event.status?.type?.shortDetail ?? event.status?.type?.description ?? "Scheduled")
-                    .font(.caption.weight(.black))
-                    .foregroundStyle(statusColor)
-                    .lineLimit(1)
+                statusPill
             }
 
             teamLine(teams.home)
@@ -407,6 +404,27 @@ struct MatchCard: View {
         return .white
     }
 
+    private var statusPill: some View {
+        Text(event.status?.statusPillText ?? "Scheduled")
+            .font(.caption.weight(.black))
+            .foregroundStyle(event.status?.isLive == true ? .white : statusColor)
+            .lineLimit(1)
+            .padding(.horizontal, event.status?.isLive == true ? 8 : 0)
+            .frame(height: event.status?.isLive == true ? CGFloat(24) : nil)
+            .background {
+                if event.status?.isLive == true {
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .fill(Color.red.opacity(0.92))
+                }
+            }
+            .overlay {
+                if event.status?.isLive == true {
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .stroke(Color.white.opacity(0.18), lineWidth: 1)
+                }
+            }
+    }
+
     private func teamLine(_ competitor: Competitor?) -> some View {
         HStack(spacing: 10) {
             TeamBadge(team: competitor?.team)
@@ -416,7 +434,7 @@ struct MatchCard: View {
                     .font(.headline.weight(.heavy))
                     .foregroundStyle(.white)
                     .lineLimit(1)
-                Text(competitor?.records?.first?.summary ?? competitor?.team?.abbreviation ?? "")
+                Text(competitor?.records?.first?.bestSummary ?? competitor?.team?.abbreviation ?? "")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)

@@ -112,13 +112,12 @@ struct TeamDetailView: View {
 
     private var formBlock: some View {
         DetailBlock(title: "Recent form") {
-            let form = loadedEvents
-                .filter { $0.status?.type?.completed == true }
+            let form = recentFormEvents
                 .prefix(8)
                 .map { result(for: $0) }
 
             if form.isEmpty {
-                StateCard(title: "No form", detail: "No completed matches are loaded for this club on this date.")
+                StateCard(title: "No form", detail: "ESPN did not return completed fixtures for this club yet.")
             } else {
                 HStack(spacing: 8) {
                     ForEach(Array(form.enumerated()), id: \.offset) { _, result in
@@ -136,11 +135,11 @@ struct TeamDetailView: View {
 
     private var scheduleBlock: some View {
         DetailBlock(title: "Schedule") {
-            if loadedEvents.isEmpty {
-                StateCard(title: "No matches", detail: "No loaded fixtures include this club.")
+            if scheduleDisplayEvents.isEmpty {
+                StateCard(title: "No matches", detail: "ESPN did not return a team schedule.")
             } else {
                 VStack(spacing: 8) {
-                    ForEach(loadedEvents.prefix(8)) { event in
+                    ForEach(scheduleDisplayEvents.prefix(8)) { event in
                         scheduleRow(event)
                     }
                 }
@@ -178,9 +177,17 @@ struct TeamDetailView: View {
                 .foregroundStyle(.white)
                 .lineLimit(1)
             Spacer()
-            Text(result)
+            Text(event.status?.isLive == true ? (event.status?.statusPillText ?? "LIVE") : result)
                 .font(.caption.weight(.black))
-                .foregroundStyle(formColor(result))
+                .foregroundStyle(event.status?.isLive == true ? .white : formColor(result))
+                .padding(.horizontal, event.status?.isLive == true ? 8 : 0)
+                .frame(height: event.status?.isLive == true ? CGFloat(24) : nil)
+                .background {
+                    if event.status?.isLive == true {
+                        RoundedRectangle(cornerRadius: 7, style: .continuous)
+                            .fill(Color.red.opacity(0.92))
+                    }
+                }
         }
         .padding(10)
         .background(Color.white.opacity(0.05))
@@ -188,11 +195,17 @@ struct TeamDetailView: View {
     }
 
     private var standingSummary: String {
+        if let summary = displayTeam.standingSummary, !summary.isEmpty {
+            return summary
+        }
         guard let rank = statValue("rank"), !rank.isEmpty else { return "" }
         return "\(ordinal(rank)) in \(league.name)"
     }
 
     private var recordSummary: String {
+        if let summary = displayTeam.recordSummary, !summary.isEmpty {
+            return summary
+        }
         let wins = statValue("wins") ?? "-"
         let ties = statValue("ties") ?? "-"
         let losses = statValue("losses") ?? "-"
@@ -242,6 +255,22 @@ struct TeamDetailView: View {
         scheduleEvents.isEmpty ? context.events : scheduleEvents
     }
 
+    private var recentFormEvents: [ScoreEvent] {
+        loadedEvents
+            .filter { $0.status?.type?.completed == true }
+            .sorted(by: newestFirst)
+    }
+
+    private var scheduleDisplayEvents: [ScoreEvent] {
+        let upcoming = loadedEvents
+            .filter { $0.status?.type?.completed != true }
+            .sorted(by: oldestFirst)
+        if !upcoming.isEmpty {
+            return upcoming
+        }
+        return loadedEvents.sorted(by: newestFirst)
+    }
+
     private var loadedArticles: [NewsArticle] {
         teamArticles.isEmpty ? context.articles : teamArticles
     }
@@ -261,5 +290,20 @@ struct TeamDetailView: View {
         scheduleEvents = await schedule ?? []
         teamArticles = await news ?? []
         isLoadingDetails = false
+    }
+
+    private func newestFirst(_ first: ScoreEvent, _ second: ScoreEvent) -> Bool {
+        eventDate(first) > eventDate(second)
+    }
+
+    private func oldestFirst(_ first: ScoreEvent, _ second: ScoreEvent) -> Bool {
+        eventDate(first) < eventDate(second)
+    }
+
+    private func eventDate(_ event: ScoreEvent) -> Date {
+        guard let date = event.date, let parsed = ISO8601DateFormatter().date(from: date) else {
+            return .distantPast
+        }
+        return parsed
     }
 }

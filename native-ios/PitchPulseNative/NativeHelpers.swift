@@ -193,9 +193,9 @@ private func formationLineName(index: Int, total: Int) -> String {
 func positionLabel(for player: RosterPlayer, rowLine: String, index: Int, count: Int) -> String {
     let exact = normalizePositionLabel(player.position?.abbreviation, displayName: player.position?.displayName)
     if !exact.isEmpty && exact != "SUB" {
-        return displayLineupPositionLabel(exact)
+        return exact
     }
-    return displayLineupPositionLabel(inferredPositionLabel(rowLine: rowLine, index: index, count: count))
+    return inferredPositionLabel(rowLine: rowLine, index: index, count: count)
 }
 
 func playerLine(_ player: RosterPlayer) -> String {
@@ -242,25 +242,17 @@ private func inferredPositionLabel(rowLine: String, index: Int, count: Int) -> S
     let labels: [String]
     switch rowLine {
     case "goalkeeper":
-        labels = ["G"]
+        labels = ["GK"]
     case "defenders":
         labels = count == 3 ? ["LCB", "CB", "RCB"] : count == 5 ? ["LWB", "CB", "CB", "CB", "RWB"] : ["LB", "CB", "CB", "RB"]
     case "attacking-midfielders":
         labels = count == 1 ? ["CAM"] : count == 2 ? ["CAM", "CAM"] : ["LW", "CAM", "RW"]
     case "forwards":
-        labels = count == 1 ? ["F"] : count == 2 ? ["F", "F"] : ["LW", "F", "RW"]
+        labels = count == 1 ? ["ST"] : count == 2 ? ["ST", "ST"] : ["LW", "ST", "RW"]
     default:
         labels = count == 1 ? ["CDM"] : count == 2 ? ["CM", "CM"] : count == 4 ? ["LM", "CM", "CM", "RM"] : ["LCM", "CM", "RCM"]
     }
     return labels[min(index, labels.count - 1)]
-}
-
-private func displayLineupPositionLabel(_ label: String) -> String {
-    switch label {
-    case "GK": return "G"
-    case "ST", "CF", "FW": return "F"
-    default: return label
-    }
 }
 
 private func lineupPlayerSort(_ first: RosterPlayer, _ second: RosterPlayer) -> Bool {
@@ -290,6 +282,25 @@ func ratingColor(_ rating: String?) -> Color {
     if value >= 6.5 { return Color(red: 0.85, green: 0.69, blue: 0) }
     if value >= 6.0 { return Color(red: 0.93, green: 0.49, blue: 0.03) }
     return .red
+}
+
+extension EventStatus {
+    var isLive: Bool {
+        type?.state == "in"
+    }
+
+    var statusPillText: String {
+        if isLive {
+            return displayClock ?? type?.shortDetail ?? "LIVE"
+        }
+        return type?.shortDetail ?? type?.description ?? "Scheduled"
+    }
+}
+
+extension TeamRecord {
+    var bestSummary: String? {
+        summary ?? displayValue
+    }
 }
 
 extension Color {
