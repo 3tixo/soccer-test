@@ -1,0 +1,27 @@
+name: PitchPulseNative
+options:
+  bundleIdPrefix: com.tixo
+  deploymentTarget:
+    iOS: "17.0"
+settings:
+  base:
+    CURRENT_PROJECT_VERSION: 1
+    MARKETING_VERSION: 1.0
+    SWIFT_VERSION: 5.0
+targets:
+  PitchPulseNative:
+    type: application
+    platform: iOS
+    sources:
+      - PitchPulseNative
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.tixo.pitchpulsenative
+        PRODUCT_NAME: PitchPulseNative
+        CODE_SIGN_STYLE: Automatic
+        TARGETED_DEVICE_FAMILY: 1
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: PitchPulse
+        INFOPLIST_KEY_LSRequiresIPhoneOS: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
