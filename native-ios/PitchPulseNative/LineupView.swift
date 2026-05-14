@@ -27,7 +27,16 @@ struct LineupView: View {
                     .padding(.vertical, 10)
                 }
                 .frame(minHeight: 690)
-                .background(Color(red: 0.09, green: 0.11, blue: 0.12))
+                .background(
+                    LinearGradient(
+                        colors: [
+                            Color(red: 0.08, green: 0.11, blue: 0.10),
+                            Color(red: 0.10, green: 0.13, blue: 0.13)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
                 .overlay(
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
                         .stroke(Color.white.opacity(0.3), lineWidth: 2)
@@ -56,7 +65,7 @@ struct TeamLineupHalf: View {
         ZStack(alignment: group.homeAway == "home" ? .bottomLeading : .topLeading) {
             VStack(spacing: 0) {
                 ForEach(rows) { row in
-                    FormationLine(row: row, reversePlayers: group.homeAway == "away")
+                    FormationLine(row: row, reversePlayers: group.homeAway == "away", team: group.team)
                 }
             }
 
@@ -81,6 +90,7 @@ struct TeamLineupHalf: View {
 struct FormationLine: View {
     let row: FormationRow
     let reversePlayers: Bool
+    let team: Team?
 
     private var players: [RosterPlayer] {
         reversePlayers ? Array(row.players.reversed()) : row.players
@@ -91,7 +101,8 @@ struct FormationLine: View {
             ForEach(Array(players.enumerated()), id: \.element.id) { index, player in
                 PlayerNode(
                     player: player,
-                    position: positionLabel(for: player, rowLine: row.line, index: index, count: players.count)
+                    position: positionLabel(for: player, rowLine: row.line, index: index, count: players.count),
+                    team: team
                 )
                 .frame(maxWidth: .infinity)
             }
@@ -104,11 +115,12 @@ struct FormationLine: View {
 struct PlayerNode: View {
     let player: RosterPlayer
     let position: String
+    let team: Team?
 
     var body: some View {
         VStack(spacing: 3) {
             ZStack(alignment: .bottomTrailing) {
-                playerAvatar
+                jerseyAvatar
                 if let rating = playerRating(player) {
                     Text(rating)
                         .font(.system(size: 10, weight: .black))
@@ -136,40 +148,35 @@ struct PlayerNode: View {
         .frame(width: 62)
     }
 
-    @ViewBuilder
-    private var playerAvatar: some View {
-        if let url = URL(string: player.athlete?.headshot?.href ?? "") {
-            AsyncImage(url: url) { image in
-                image
-                    .resizable()
-                    .scaledToFill()
-            } placeholder: {
-                jerseyAvatar
-            }
-            .frame(width: 34, height: 34)
-            .clipShape(Circle())
-            .overlay(Circle().stroke(Color.white.opacity(0.18), lineWidth: 1))
-        } else {
-            jerseyAvatar
-        }
-    }
-
     private var jerseyAvatar: some View {
-        Circle()
+        JerseyShape()
             .fill(
                 LinearGradient(
-                    colors: [Color.white.opacity(0.18), Color.white.opacity(0.06)],
+                    colors: jerseyColors,
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 )
             )
             .overlay(
                 Text(player.jersey ?? "")
-                    .font(.caption.weight(.black))
+                    .font(.system(size: 12, weight: .black, design: .rounded))
                     .foregroundStyle(.white)
+                    .shadow(color: .black.opacity(0.45), radius: 1, x: 0, y: 1)
             )
-            .frame(width: 34, height: 34)
-            .overlay(Circle().stroke(Color.white.opacity(0.16), lineWidth: 1))
+            .overlay(JerseyShape().stroke(Color.white.opacity(0.24), lineWidth: 1))
+            .frame(width: 38, height: 40)
+            .shadow(color: .black.opacity(0.25), radius: 3, x: 0, y: 2)
+    }
+
+    private var jerseyColors: [Color] {
+        guard let team else {
+            return [Color.white.opacity(0.22), Color.white.opacity(0.08)]
+        }
+        return [
+            team.lineupPrimaryColor,
+            team.lineupSecondaryColor.opacity(0.75),
+            team.lineupPrimaryColor.opacity(0.78)
+        ]
     }
 
     private var playerName: String {
@@ -271,10 +278,8 @@ struct PitchMarkings: View {
                     .rotationEffect(.degrees(180))
                     .position(x: width / 2, y: height - boxHeight / 2)
 
-                cornerArc(top: true, left: true).stroke(line, lineWidth: 2).frame(width: 26, height: 26).position(x: 0, y: 0)
-                cornerArc(top: true, left: false).stroke(line, lineWidth: 2).frame(width: 26, height: 26).position(x: width, y: 0)
-                cornerArc(top: false, left: true).stroke(line, lineWidth: 2).frame(width: 26, height: 26).position(x: 0, y: height)
-                cornerArc(top: false, left: false).stroke(line, lineWidth: 2).frame(width: 26, height: 26).position(x: width, y: height)
+                cornerArcs(width: width, height: height, radius: 14)
+                    .stroke(line, lineWidth: 2)
             }
         }
         .allowsHitTesting(false)
@@ -294,10 +299,40 @@ struct PitchMarkings: View {
         return path
     }
 
-    private func cornerArc(top: Bool, left: Bool) -> Path {
+    private func cornerArcs(width: CGFloat, height: CGFloat, radius: CGFloat) -> Path {
         var path = Path()
-        let rect = CGRect(x: left ? -13 : 13, y: top ? -13 : 13, width: 26, height: 26)
-        path.addEllipse(in: rect)
+        let size = radius * 2
+        path.addEllipse(in: CGRect(x: -radius, y: -radius, width: size, height: size))
+        path.addEllipse(in: CGRect(x: width - radius, y: -radius, width: size, height: size))
+        path.addEllipse(in: CGRect(x: -radius, y: height - radius, width: size, height: size))
+        path.addEllipse(in: CGRect(x: width - radius, y: height - radius, width: size, height: size))
+        return path
+    }
+}
+
+struct JerseyShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        let width = rect.width
+        let height = rect.height
+        var path = Path()
+
+        path.move(to: CGPoint(x: width * 0.31, y: height * 0.05))
+        path.addLine(to: CGPoint(x: width * 0.42, y: height * 0.00))
+        path.addQuadCurve(
+            to: CGPoint(x: width * 0.58, y: height * 0.00),
+            control: CGPoint(x: width * 0.50, y: height * 0.08)
+        )
+        path.addLine(to: CGPoint(x: width * 0.69, y: height * 0.05))
+        path.addLine(to: CGPoint(x: width * 0.96, y: height * 0.25))
+        path.addLine(to: CGPoint(x: width * 0.82, y: height * 0.47))
+        path.addLine(to: CGPoint(x: width * 0.75, y: height * 0.42))
+        path.addLine(to: CGPoint(x: width * 0.72, y: height * 0.95))
+        path.addLine(to: CGPoint(x: width * 0.28, y: height * 0.95))
+        path.addLine(to: CGPoint(x: width * 0.25, y: height * 0.42))
+        path.addLine(to: CGPoint(x: width * 0.18, y: height * 0.47))
+        path.addLine(to: CGPoint(x: width * 0.04, y: height * 0.25))
+        path.closeSubpath()
+
         return path
     }
 }

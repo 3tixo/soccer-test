@@ -89,6 +89,8 @@ struct Team: Decodable {
     let abbreviation: String?
     let logo: String?
     let logos: [TeamLogo]?
+    let color: String?
+    let alternateColor: String?
 
     var bestName: String {
         shortDisplayName ?? displayName ?? name ?? "TBA"

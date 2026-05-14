@@ -21,7 +21,7 @@ struct TeamDetailView: View {
 
     var body: some View {
         ZStack {
-            Color.pitchBackground.ignoresSafeArea()
+            AppBackground()
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {

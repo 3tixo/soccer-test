@@ -11,7 +11,7 @@ struct ContentView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                Color.pitchBackground.ignoresSafeArea()
+                AppBackground()
 
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
@@ -27,6 +27,11 @@ struct ContentView: View {
                     .padding(.bottom, 24)
                 }
                 .scrollIndicators(.hidden)
+
+                if viewModel.isLoading && viewModel.events.isEmpty && viewModel.standings.isEmpty {
+                    LoadingOverlay(text: "Loading ESPN data")
+                        .transition(.opacity)
+                }
             }
             .task {
                 await viewModel.load()
@@ -437,15 +442,24 @@ struct TeamBadge: View {
     let team: Team?
 
     var body: some View {
-        AsyncImage(url: URL(string: team?.bestLogo ?? "")) { image in
-            image
-                .resizable()
-                .scaledToFit()
-        } placeholder: {
+        ZStack {
             Circle()
                 .fill(Color.white.opacity(0.08))
-                .overlay(Text(team?.abbreviation ?? "-").font(.caption2.weight(.black)))
+            AsyncImage(url: URL(string: team?.bestLogo ?? "")) { image in
+                image
+                    .resizable()
+                    .scaledToFit()
+                    .padding(3)
+            } placeholder: {
+                Text(team?.abbreviation ?? "-")
+                    .font(.caption2.weight(.black))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+            }
         }
+        .overlay(Circle().stroke(Color.white.opacity(0.1), lineWidth: 1))
+        .shadow(color: .black.opacity(0.22), radius: 4, x: 0, y: 2)
         .frame(width: 34, height: 34)
     }
 }
@@ -576,6 +590,27 @@ struct StateCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.pitchSurface)
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+}
+
+struct LoadingOverlay: View {
+    let text: String
+
+    var body: some View {
+        VStack(spacing: 12) {
+            ProgressView()
+                .tint(Color.pitchAccent)
+                .scaleEffect(1.15)
+            Text(text)
+                .font(.caption.weight(.black))
+                .foregroundStyle(.white)
+        }
+        .padding(18)
+        .frame(minWidth: 172)
+        .background(Color.pitchSurface.opacity(0.94))
+        .overlay(cardStroke(12))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .shadow(color: .black.opacity(0.35), radius: 18, x: 0, y: 10)
     }
 }
 
