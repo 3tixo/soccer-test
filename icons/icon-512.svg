@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="PitchPulse">
+  <rect width="512" height="512" rx="112" fill="#07130e"/>
+  <circle cx="256" cy="256" r="178" fill="#0f241a" stroke="#2de38f" stroke-width="18"/>
+  <path d="M256 95v322M95 256h322" stroke="#98a9a0" stroke-width="12" stroke-linecap="round" opacity=".55"/>
+  <circle cx="256" cy="256" r="72" fill="none" stroke="#98a9a0" stroke-width="12" opacity=".55"/>
+  <path d="M144 158h224v76H144zM144 278h224v76H144z" fill="none" stroke="#f5fbf8" stroke-width="14" stroke-linejoin="round"/>
+  <circle cx="256" cy="256" r="34" fill="#2de38f"/>
+  <path d="M242 236h28l-13 24h28l-47 60 13-38h-25z" fill="#07130e"/>
+</svg>
