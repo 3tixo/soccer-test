@@ -3,6 +3,14 @@ import SwiftUI
 struct TeamDetailView: View {
     let context: TeamDetailContext
     let league: League
+    @ObservedObject var favoriteStore: FavoriteStore
+
+    @State private var profileTeam: Team?
+    @State private var scheduleEvents: [ScoreEvent] = []
+    @State private var teamArticles: [NewsArticle] = []
+    @State private var isLoadingDetails = true
+
+    private let service = ESPNService()
 
     private var standingStats: [String: StandingStat] {
         Dictionary(uniqueKeysWithValues: (context.standing?.stats ?? []).compactMap { stat in
@@ -19,6 +27,12 @@ struct TeamDetailView: View {
                 VStack(alignment: .leading, spacing: 14) {
                     hero
                     snapshot
+                    if isLoadingDetails {
+                        ProgressView()
+                            .tint(Color.pitchAccent)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 10)
+                    }
                     formBlock
                     scheduleBlock
                     newsBlock
@@ -27,18 +41,21 @@ struct TeamDetailView: View {
             }
             .scrollIndicators(.hidden)
         }
+        .task {
+            await loadTeamDetails()
+        }
     }
 
     private var hero: some View {
         HStack(spacing: 14) {
-            TeamBadge(team: context.team)
+            TeamBadge(team: displayTeam)
                 .frame(width: 58, height: 58)
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(league.name.uppercased())
                     .font(.caption2.weight(.black))
                     .foregroundStyle(Color.pitchAccent)
-                Text(context.team.bestName)
+                Text(displayTeam.bestName)
                     .font(.title2.weight(.black))
                     .foregroundStyle(.white)
                     .lineLimit(2)
@@ -48,6 +65,18 @@ struct TeamDetailView: View {
             }
 
             Spacer()
+
+            Button {
+                favoriteStore.toggle(displayTeam)
+            } label: {
+                Image(systemName: favoriteStore.contains(displayTeam) ? "star.fill" : "star")
+                    .font(.headline.weight(.black))
+                    .foregroundStyle(favoriteStore.contains(displayTeam) ? Color.pitchBackground : .white)
+                    .frame(width: 42, height: 42)
+                    .background(favoriteStore.contains(displayTeam) ? Color.pitchAccent : Color.pitchSurface)
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            }
+            .buttonStyle(.plain)
         }
         .padding(16)
         .background(Color.pitchCard)
@@ -83,7 +112,7 @@ struct TeamDetailView: View {
 
     private var formBlock: some View {
         DetailBlock(title: "Recent form") {
-            let form = context.events
+            let form = loadedEvents
                 .filter { $0.status?.type?.completed == true }
                 .prefix(8)
                 .map { result(for: $0) }
@@ -107,11 +136,11 @@ struct TeamDetailView: View {
 
     private var scheduleBlock: some View {
         DetailBlock(title: "Schedule") {
-            if context.events.isEmpty {
+            if loadedEvents.isEmpty {
                 StateCard(title: "No matches", detail: "No loaded fixtures include this club.")
             } else {
                 VStack(spacing: 8) {
-                    ForEach(context.events.prefix(8)) { event in
+                    ForEach(loadedEvents.prefix(8)) { event in
                         scheduleRow(event)
                     }
                 }
@@ -121,11 +150,11 @@ struct TeamDetailView: View {
 
     private var newsBlock: some View {
         DetailBlock(title: "Team news") {
-            if context.articles.isEmpty {
+            if loadedArticles.isEmpty {
                 StateCard(title: "No team news", detail: "No loaded ESPN articles matched this club.")
             } else {
                 VStack(spacing: 10) {
-                    ForEach(context.articles.prefix(4)) { article in
+                    ForEach(loadedArticles.prefix(4)) { article in
                         NewsCard(article: article)
                     }
                 }
@@ -135,8 +164,8 @@ struct TeamDetailView: View {
 
     private func scheduleRow(_ event: ScoreEvent) -> some View {
         let teams = event.matchTeams
-        let opponent = teams.home?.team?.stableId == context.team.stableId ? teams.away : teams.home
-        let prefix = teams.home?.team?.stableId == context.team.stableId ? "vs" : "@"
+        let opponent = teams.home?.team?.stableId == displayTeam.stableId ? teams.away : teams.home
+        let prefix = teams.home?.team?.stableId == displayTeam.stableId ? "vs" : "@"
         let result = event.status?.type?.completed == true ? result(for: event) : kickoffTime(event.date)
 
         return HStack(spacing: 10) {
@@ -177,8 +206,8 @@ struct TeamDetailView: View {
     private func result(for event: ScoreEvent) -> String {
         let competitors = event.competition?.competitors ?? []
         guard
-            let team = competitors.first(where: { $0.team?.stableId == context.team.stableId }),
-            let opponent = competitors.first(where: { $0.team?.stableId != context.team.stableId })
+            let team = competitors.first(where: { $0.team?.stableId == displayTeam.stableId }),
+            let opponent = competitors.first(where: { $0.team?.stableId != displayTeam.stableId })
         else {
             return "-"
         }
@@ -203,5 +232,34 @@ struct TeamDetailView: View {
         case "D": return .yellow
         default: return .secondary
         }
+    }
+
+    private var displayTeam: Team {
+        profileTeam ?? context.team
+    }
+
+    private var loadedEvents: [ScoreEvent] {
+        scheduleEvents.isEmpty ? context.events : scheduleEvents
+    }
+
+    private var loadedArticles: [NewsArticle] {
+        teamArticles.isEmpty ? context.articles : teamArticles
+    }
+
+    private func loadTeamDetails() async {
+        guard let teamId = context.team.id else {
+            isLoadingDetails = false
+            return
+        }
+
+        isLoadingDetails = true
+        async let profile: Team? = try? service.fetchTeamProfile(leagueId: league.id, teamId: teamId)
+        async let schedule: [ScoreEvent]? = try? service.fetchTeamSchedule(leagueId: league.id, teamId: teamId)
+        async let news: [NewsArticle]? = try? service.fetchTeamNews(leagueId: league.id, teamId: teamId)
+
+        profileTeam = await profile ?? context.team
+        scheduleEvents = await schedule ?? []
+        teamArticles = await news ?? []
+        isLoadingDetails = false
     }
 }

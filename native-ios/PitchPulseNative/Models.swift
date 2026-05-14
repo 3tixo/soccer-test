@@ -168,6 +168,15 @@ struct NewsResponse: Decodable {
     let articles: [NewsArticle]?
 }
 
+struct TeamProfileResponse: Decodable {
+    let team: Team?
+}
+
+struct TeamScheduleResponse: Decodable {
+    let team: Team?
+    let events: [ScoreEvent]?
+}
+
 struct NewsArticle: Identifiable, Decodable {
     let headline: String?
     let description: String?

@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 
 enum ESPNError: Error {
@@ -28,6 +29,21 @@ struct ESPNService {
 
     func fetchSummary(leagueId: String, eventId: String) async throws -> MatchSummary {
         try await fetch("\(siteAPI)/site/v2/sports/soccer/\(leagueId)/summary?event=\(eventId)")
+    }
+
+    func fetchTeamProfile(leagueId: String, teamId: String) async throws -> Team? {
+        let response: TeamProfileResponse = try await fetch("\(siteAPI)/site/v2/sports/soccer/\(leagueId)/teams/\(teamId)")
+        return response.team
+    }
+
+    func fetchTeamSchedule(leagueId: String, teamId: String) async throws -> [ScoreEvent] {
+        let response: TeamScheduleResponse = try await fetch("\(siteAPI)/site/v2/sports/soccer/\(leagueId)/teams/\(teamId)/schedule")
+        return response.events ?? []
+    }
+
+    func fetchTeamNews(leagueId: String, teamId: String) async throws -> [NewsArticle] {
+        let response: NewsResponse = try await fetch("\(siteAPI)/site/v2/sports/soccer/\(leagueId)/news?team=\(teamId)")
+        return response.articles ?? []
     }
 
     private func fetch<T: Decodable>(_ urlString: String) async throws -> T {

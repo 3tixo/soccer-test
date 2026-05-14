@@ -3,8 +3,10 @@ import SwiftUI
 struct ContentView: View {
     @StateObject private var viewModel = ScoreboardViewModel()
     @StateObject private var alertManager = MatchAlertManager()
+    @StateObject private var favoriteStore = FavoriteStore()
     @State private var selectedEvent: ScoreEvent?
     @State private var selectedTeam: TeamDetailContext?
+    @State private var favoritesOnly = false
 
     var body: some View {
         NavigationStack {
@@ -40,7 +42,7 @@ struct ContentView: View {
                     .presentationDragIndicator(.visible)
             }
             .sheet(item: $selectedTeam) { context in
-                TeamDetailView(context: context, league: viewModel.selectedLeague)
+                TeamDetailView(context: context, league: viewModel.selectedLeague, favoriteStore: favoriteStore)
                     .presentationDetents([.large])
                     .presentationDragIndicator(.visible)
             }
@@ -56,6 +58,18 @@ struct ContentView: View {
             }
 
             Spacer()
+
+            Button {
+                favoritesOnly.toggle()
+            } label: {
+                Image(systemName: favoritesOnly ? "star.fill" : "star")
+                    .font(.headline.weight(.black))
+                    .foregroundStyle(favoritesOnly ? Color.pitchBackground : .white)
+                    .frame(width: 44, height: 44)
+                    .background(favoritesOnly ? Color.pitchAccent : Color.pitchSurface)
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            }
+            .buttonStyle(.plain)
 
             Button {
                 Task {
@@ -253,15 +267,15 @@ struct ContentView: View {
 
             if let errorMessage = viewModel.errorMessage, viewModel.events.isEmpty {
                 StateCard(title: "ESPN error", detail: errorMessage)
-            } else if viewModel.filteredEvents.isEmpty && !viewModel.isLoading {
+            } else if visibleEvents.isEmpty && !viewModel.isLoading {
                 StateCard(title: "No matches", detail: "ESPN did not return matching fixtures.")
             } else {
                 LazyVStack(spacing: 10) {
-                    ForEach(viewModel.filteredEvents) { event in
+                    ForEach(visibleEvents) { event in
                         Button {
                             selectedEvent = event
                         } label: {
-                            MatchCard(event: event)
+                            MatchCard(event: event, favoriteStore: favoriteStore)
                         }
                         .buttonStyle(.plain)
                     }
@@ -282,7 +296,7 @@ struct ContentView: View {
                         Button {
                             selectedTeam = viewModel.teamContext(for: entry.team)
                         } label: {
-                            StandingRow(entry: entry, fallbackRank: index + 1)
+                            StandingRow(entry: entry, fallbackRank: index + 1, isFavorite: favoriteStore.contains(entry.team))
                         }
                         .buttonStyle(.plain)
                     }
@@ -317,6 +331,11 @@ struct ContentView: View {
         case .news: return "newspaper"
         }
     }
+
+    private var visibleEvents: [ScoreEvent] {
+        guard favoritesOnly else { return viewModel.filteredEvents }
+        return viewModel.filteredEvents.filter { favoriteStore.eventContainsFavorite($0) }
+    }
 }
 
 struct SectionTitle: View {
@@ -337,6 +356,7 @@ struct SectionTitle: View {
 
 struct MatchCard: View {
     let event: ScoreEvent
+    @ObservedObject var favoriteStore: FavoriteStore
 
     private var teams: MatchTeams {
         event.matchTeams
@@ -399,6 +419,12 @@ struct MatchCard: View {
 
             Spacer()
 
+            if favoriteStore.contains(competitor?.team) {
+                Image(systemName: "star.fill")
+                    .font(.caption.weight(.black))
+                    .foregroundStyle(Color.pitchAccent)
+            }
+
             Text(isPre ? competitor?.team?.abbreviation ?? "-" : competitor?.score ?? "-")
                 .font(.title3.weight(.black))
                 .foregroundStyle(.white)
@@ -427,6 +453,7 @@ struct TeamBadge: View {
 struct StandingRow: View {
     let entry: StandingEntry
     let fallbackRank: Int
+    let isFavorite: Bool
 
     private var stats: [String: StandingStat] {
         Dictionary(uniqueKeysWithValues: (entry.stats ?? []).compactMap { stat in
@@ -456,6 +483,12 @@ struct StandingRow: View {
             }
 
             Spacer()
+
+            if isFavorite {
+                Image(systemName: "star.fill")
+                    .font(.caption.weight(.black))
+                    .foregroundStyle(Color.pitchAccent)
+            }
 
             VStack(alignment: .trailing, spacing: 2) {
                 Text(value("points", fallback: "-"))

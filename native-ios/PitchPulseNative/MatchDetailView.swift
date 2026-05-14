@@ -7,6 +7,7 @@ struct MatchDetailView: View {
     @State private var summary: MatchSummary?
     @State private var isLoading = true
     @State private var errorMessage: String?
+    @State private var activeTab: MatchDetailTab = .summary
 
     private let service = ESPNService()
 
@@ -29,11 +30,8 @@ struct MatchDetailView: View {
                         StateCard(title: "Details unavailable", detail: errorMessage)
                     }
 
-                    oddsBlock
-                    timelineBlock
-                    statsBlock
-                    lineupsBlock
-                    newsBlock
+                    detailTabs
+                    activeDetailSection
                 }
                 .padding(16)
             }
@@ -111,6 +109,44 @@ struct MatchDetailView: View {
                     }
                 }
             }
+        }
+    }
+
+    private var detailTabs: some View {
+        ScrollView(.horizontal) {
+            HStack(spacing: 8) {
+                ForEach(MatchDetailTab.allCases) { tab in
+                    Button {
+                        activeTab = tab
+                    } label: {
+                        Text(tab.rawValue)
+                            .font(.caption.weight(.black))
+                            .foregroundStyle(activeTab == tab ? Color.pitchBackground : .white)
+                            .padding(.horizontal, 12)
+                            .frame(height: 38)
+                            .background(activeTab == tab ? Color.pitchAccent : Color.pitchSurface)
+                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .scrollIndicators(.hidden)
+    }
+
+    @ViewBuilder
+    private var activeDetailSection: some View {
+        switch activeTab {
+        case .summary:
+            timelineBlock
+        case .stats:
+            statsBlock
+        case .lineups:
+            lineupsBlock
+        case .odds:
+            oddsBlock
+        case .news:
+            newsBlock
         }
     }
 
@@ -249,6 +285,16 @@ struct MatchDetailView: View {
 
         isLoading = false
     }
+}
+
+enum MatchDetailTab: String, CaseIterable, Identifiable {
+    case summary = "Summary"
+    case stats = "Stats"
+    case lineups = "Lineups"
+    case odds = "Odds"
+    case news = "News"
+
+    var id: String { rawValue }
 }
 
 struct DetailBlock<Content: View>: View {

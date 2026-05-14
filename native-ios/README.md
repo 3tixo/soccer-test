@@ -47,7 +47,12 @@ Current native features:
 - Decimal odds display in match details when ESPN returns odds
 - Native lineup pitch with formation rows, player numbers, position labels, ratings, and bench lists
 - League switching uses ESPN's default match day for each league until the user manually picks a date
+- Native WidgetKit target embedded in the SwiftUI app
+- Persistent favorite teams and favorite-match filtering
+- Team pages fetch ESPN profile, schedule, and team news
+- Match details use segmented tabs for Summary, Stats, Lineups, Odds, and News
 
 Still to port from the web app:
 
-- Native WidgetKit target wired into this new native app
+- Widget favorite-team configuration
+- Favorite-only notification scheduling
