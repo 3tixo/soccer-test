@@ -1,5 +1,7 @@
 const SITE_API = "https://site.api.espn.com/apis";
 const CORE_API = "https://sports.core.api.espn.com/v2/sports";
+const ALERTS_ENABLED_KEY = "pitchpulse.alerts.enabled";
+const ALERTS_SEEN_KEY = "pitchpulse.alerts.seen";
 
 const LEAGUES = [
   { id: "eng.1", name: "Premier League", country: "England", logo: "https://a.espncdn.com/i/leaguelogos/soccer/500/23.png" },
@@ -27,6 +29,8 @@ const state = {
   news: null,
   selectedTeamId: null,
   hasCompletedInitialLoad: false,
+  alertsEnabled: localStorage.getItem(ALERTS_ENABLED_KEY) === "true",
+  alertSeenKeys: loadAlertSeenKeys(),
   summaryCache: new Map(),
   competitionCache: new Map(),
   teamCache: new Map(),
@@ -37,6 +41,7 @@ const els = {
   appShell: document.querySelector(".app-shell"),
   leagueStrip: document.querySelector("#leagueStrip"),
   leagueHero: document.querySelector("#leagueHero"),
+  alertsButton: document.querySelector("#alertsButton"),
   searchToggle: document.querySelector("#searchToggle"),
   searchPanel: document.querySelector("#searchPanel"),
   leagueSearch: document.querySelector("#leagueSearch"),
@@ -69,13 +74,23 @@ const els = {
 
 document.addEventListener("DOMContentLoaded", init);
 
+function loadAlertSeenKeys() {
+  try {
+    return new Set(JSON.parse(localStorage.getItem(ALERTS_SEEN_KEY) || "[]"));
+  } catch {
+    return new Set();
+  }
+}
+
 function init() {
   bindEvents();
   renderLeagueChips();
   renderDate();
   renderShell();
+  renderAlertsButton();
   hydrateIcons();
   registerServiceWorker();
+  startScorePolling();
   loadLeagueData({ useEspnDefaultDate: true });
 }
 
@@ -89,7 +104,237 @@ function registerServiceWorker() {
   });
 }
 
+function getLocalNotifications() {
+  return window.Capacitor?.Plugins?.LocalNotifications || null;
+}
+
+async function toggleMatchAlerts() {
+  if (state.alertsEnabled) {
+    state.alertsEnabled = false;
+    localStorage.setItem(ALERTS_ENABLED_KEY, "false");
+    cancelUpcomingKickoffAlerts(state.scoreboard?.events ?? []).catch((error) => {
+      console.warn("Could not cancel kickoff alerts", error);
+    });
+    renderAlertsButton();
+    return;
+  }
+
+  const granted = await requestNotificationAccess();
+  if (!granted) {
+    alert("Notifications are blocked. Enable them in iPhone Settings for the IPA, then turn alerts on again.");
+    renderAlertsButton();
+    return;
+  }
+
+  state.alertsEnabled = true;
+  localStorage.setItem(ALERTS_ENABLED_KEY, "true");
+  seedAlertKeys(state.scoreboard?.events ?? []);
+  renderAlertsButton();
+  await sendAppNotification("PitchPulse alerts on", "Score, kickoff, and full-time alerts are enabled for the current league.")
+    .catch((error) => console.warn("Could not show notification", error));
+  await scheduleUpcomingKickoffAlerts(state.scoreboard?.events ?? [])
+    .catch((error) => console.warn("Could not schedule kickoff alerts", error));
+}
+
+async function requestNotificationAccess() {
+  const localNotifications = getLocalNotifications();
+
+  if (localNotifications) {
+    const current = await localNotifications.checkPermissions();
+    if (current.display === "granted") return true;
+    const requested = await localNotifications.requestPermissions();
+    return requested.display === "granted";
+  }
+
+  if (!("Notification" in window)) return false;
+  if (Notification.permission === "granted") return true;
+  if (Notification.permission === "denied") return false;
+  return (await Notification.requestPermission()) === "granted";
+}
+
+function renderAlertsButton() {
+  if (!els.alertsButton) return;
+  els.alertsButton.classList.toggle("active", state.alertsEnabled);
+  els.alertsButton.setAttribute("aria-label", state.alertsEnabled ? "Disable match alerts" : "Enable match alerts");
+  els.alertsButton.title = state.alertsEnabled ? "Match alerts on" : "Match alerts off";
+}
+
+function handleMatchAlerts(previousEvents = [], nextEvents = []) {
+  if (!state.alertsEnabled) return;
+
+  if (!previousEvents.length) {
+    seedAlertKeys(nextEvents);
+    return;
+  }
+
+  const previousById = new Map(previousEvents.map((event) => [String(event.id), event]));
+  nextEvents.forEach((event) => {
+    const alertKey = getAlertKey(event);
+    const previous = previousById.get(String(event.id));
+    if (!previous || state.alertSeenKeys.has(alertKey)) {
+      state.alertSeenKeys.add(alertKey);
+      return;
+    }
+
+    if (hasAlertWorthyChange(previous, event)) {
+      const message = buildMatchAlert(event, previous);
+      sendAppNotification(message.title, message.body).catch((error) => {
+        console.warn("Could not show notification", error);
+      });
+    }
+    state.alertSeenKeys.add(alertKey);
+  });
+  persistAlertKeys();
+}
+
+function seedAlertKeys(events = []) {
+  events.forEach((event) => state.alertSeenKeys.add(getAlertKey(event)));
+  persistAlertKeys();
+}
+
+function persistAlertKeys() {
+  const keys = [...state.alertSeenKeys].slice(-120);
+  state.alertSeenKeys = new Set(keys);
+  localStorage.setItem(ALERTS_SEEN_KEY, JSON.stringify(keys));
+}
+
+function getAlertKey(event) {
+  const teams = normalizeCompetitors(event.competitions?.[0]?.competitors);
+  const status = event.status?.type ?? {};
+  return [
+    event.id,
+    status.state || "",
+    status.completed ? "done" : "open",
+    teams.home.score ?? "-",
+    teams.away.score ?? "-",
+  ].join(":");
+}
+
+function hasAlertWorthyChange(previous, current) {
+  const oldTeams = normalizeCompetitors(previous.competitions?.[0]?.competitors);
+  const newTeams = normalizeCompetitors(current.competitions?.[0]?.competitors);
+  const oldStatus = previous.status?.type ?? {};
+  const newStatus = current.status?.type ?? {};
+
+  return oldTeams.home.score !== newTeams.home.score
+    || oldTeams.away.score !== newTeams.away.score
+    || oldStatus.state !== newStatus.state
+    || Boolean(oldStatus.completed) !== Boolean(newStatus.completed);
+}
+
+function buildMatchAlert(event, previous) {
+  const teams = normalizeCompetitors(event.competitions?.[0]?.competitors);
+  const oldTeams = normalizeCompetitors(previous.competitions?.[0]?.competitors);
+  const status = event.status?.type ?? {};
+  const oldStatus = previous.status?.type ?? {};
+  const score = `${teams.home.score ?? "-"}-${teams.away.score ?? "-"}`;
+  const fixture = `${teams.home.displayName} vs ${teams.away.displayName}`;
+
+  if (oldTeams.home.score !== teams.home.score || oldTeams.away.score !== teams.away.score) {
+    return {
+      title: `Goal update: ${score}`,
+      body: fixture,
+    };
+  }
+
+  if (oldStatus.state === "pre" && status.state === "in") {
+    return {
+      title: "Kickoff",
+      body: fixture,
+    };
+  }
+
+  if (!oldStatus.completed && status.completed) {
+    return {
+      title: `Full time: ${score}`,
+      body: fixture,
+    };
+  }
+
+  return {
+    title: "Match update",
+    body: `${fixture} ${score}`,
+  };
+}
+
+async function sendAppNotification(title, body) {
+  const localNotifications = getLocalNotifications();
+
+  if (localNotifications) {
+    await localNotifications.schedule({
+      notifications: [{
+        id: makeNotificationId(`${Date.now()}:${title}:${body}`),
+        title,
+        body,
+        schedule: { at: new Date(Date.now() + 300) },
+        sound: "default",
+      }],
+    });
+    return;
+  }
+
+  if (!("Notification" in window) || Notification.permission !== "granted") return;
+  if ("serviceWorker" in navigator) {
+    const registration = await navigator.serviceWorker.ready;
+    registration.showNotification(title, {
+      body,
+      icon: "icons/icon-192.svg",
+      badge: "icons/icon-192.svg",
+    });
+    return;
+  }
+
+  new Notification(title, { body, icon: "icons/icon-192.svg" });
+}
+
+async function scheduleUpcomingKickoffAlerts(events = []) {
+  if (!state.alertsEnabled) return;
+  const localNotifications = getLocalNotifications();
+  if (!localNotifications) return;
+
+  const now = Date.now();
+  const notifications = events
+    .filter((event) => event.status?.type?.state === "pre" && event.date)
+    .map((event) => ({ event, at: new Date(event.date) }))
+    .filter(({ at }) => at.getTime() > now + 60000)
+    .slice(0, 20)
+    .map(({ event, at }) => {
+      const teams = normalizeCompetitors(event.competitions?.[0]?.competitors);
+      return {
+        id: makeNotificationId(`kickoff:${event.id}`),
+        title: `Kickoff: ${teams.home.displayName} vs ${teams.away.displayName}`,
+        body: `${getLeagueName()} starts at ${formatTime(at)}`,
+        schedule: { at },
+        sound: "default",
+      };
+    });
+
+  if (notifications.length) {
+    await localNotifications.schedule({ notifications });
+  }
+}
+
+async function cancelUpcomingKickoffAlerts(events = []) {
+  const localNotifications = getLocalNotifications();
+  if (!localNotifications || !events.length) return;
+
+  await localNotifications.cancel({
+    notifications: events.map((event) => ({ id: makeNotificationId(`kickoff:${event.id}`) })),
+  });
+}
+
+function makeNotificationId(value) {
+  let hash = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    hash = ((hash << 5) - hash) + value.charCodeAt(index);
+    hash |= 0;
+  }
+  return Math.abs(hash % 2147483647) || 1;
+}
+
 function bindEvents() {
+  els.alertsButton.addEventListener("click", toggleMatchAlerts);
+
   els.searchToggle.addEventListener("click", () => {
     els.searchPanel.hidden = !els.searchPanel.hidden;
     if (!els.searchPanel.hidden) els.leagueSearch.focus();
@@ -134,6 +379,14 @@ function bindEvents() {
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") closeSheet();
   });
+}
+
+function startScorePolling() {
+  window.setInterval(() => {
+    if (document.visibilityState !== "visible") return;
+    if (!isSameLocalDay(state.date, new Date())) return;
+    loadLeagueData({ force: true, silent: true });
+  }, 60000);
 }
 
 function renderLeagueChips(filter = "") {
@@ -293,9 +546,10 @@ function shiftDate(days) {
 }
 
 async function loadLeagueData(options = {}) {
-  setLoading(true);
+  if (!options.silent) setLoading(true);
   renderDate();
-  renderLoadingCards();
+  if (!options.silent) renderLoadingCards();
+  const previousEvents = state.scoreboard?.events ?? [];
 
   try {
     const [scoreboardResult, standingsResult, newsResult] = await Promise.allSettled([
@@ -315,6 +569,10 @@ async function loadLeagueData(options = {}) {
     state.scoreboard = scoreboard;
     state.standings = standings;
     state.news = news;
+    handleMatchAlerts(previousEvents, scoreboard?.events ?? []);
+    scheduleUpcomingKickoffAlerts(scoreboard?.events ?? []).catch((error) => {
+      console.warn("Could not schedule kickoff alerts", error);
+    });
 
     if (options.useEspnDefaultDate && scoreboard?.day?.date) {
       state.date = fromApiDay(scoreboard.day.date);
@@ -336,10 +594,16 @@ async function loadLeagueData(options = {}) {
     }
     setSyncLabel();
   } catch (error) {
-    renderError(error);
+    if (options.silent) {
+      console.warn("Silent ESPN refresh failed", error);
+    } else {
+      renderError(error);
+    }
   } finally {
-    setLoading(false);
-    finishInitialLoad();
+    if (!options.silent) {
+      setLoading(false);
+      finishInitialLoad();
+    }
     hydrateIcons();
   }
 }

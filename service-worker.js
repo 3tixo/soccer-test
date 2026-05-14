@@ -1,4 +1,4 @@
-const CACHE_NAME = "pitchpulse-static-v1";
+const CACHE_NAME = "pitchpulse-static-v2";
 const STATIC_ASSETS = [
   "./",
   "./index.html",
@@ -56,6 +56,18 @@ self.addEventListener("fetch", (event) => {
         }
         return response;
       });
+    })
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  event.waitUntil(
+    clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientList) => {
+      const existing = clientList.find((client) => "focus" in client);
+      if (existing) return existing.focus();
+      if (clients.openWindow) return clients.openWindow("./index.html");
+      return undefined;
     })
   );
 });
