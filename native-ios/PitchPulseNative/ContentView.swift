@@ -2,6 +2,8 @@ import SwiftUI
 
 struct ContentView: View {
     @StateObject private var viewModel = ScoreboardViewModel()
+    @StateObject private var alertManager = MatchAlertManager()
+    @State private var selectedEvent: ScoreEvent?
 
     var body: some View {
         NavigationStack {
@@ -11,9 +13,11 @@ struct ContentView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
                         header
+                        searchField
                         leagueStrip
                         hero
-                        matchSection
+                        tabPicker
+                        activeSection
                     }
                     .padding(.horizontal, 16)
                     .padding(.bottom, 24)
@@ -22,24 +26,71 @@ struct ContentView: View {
             }
             .task {
                 await viewModel.load()
+                alertManager.refresh(events: viewModel.events, league: viewModel.selectedLeague)
             }
             .refreshable {
                 await viewModel.load()
+                alertManager.refresh(events: viewModel.events, league: viewModel.selectedLeague)
+            }
+            .sheet(item: $selectedEvent) { event in
+                MatchDetailView(event: event, league: viewModel.selectedLeague)
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.visible)
             }
         }
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text("SOCCER LIVE CENTER")
-                .font(.caption2.weight(.black))
-                .foregroundStyle(Color.pitchAccent)
-            Text("PitchPulse")
-                .font(.system(size: 32, weight: .black, design: .rounded))
-                .foregroundStyle(.white)
+        HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text("SOCCER LIVE CENTER")
+                    .font(.caption2.weight(.black))
+                    .foregroundStyle(Color.pitchAccent)
+                Text("PitchPulse")
+                    .font(.system(size: 32, weight: .black, design: .rounded))
+                    .foregroundStyle(.white)
+            }
+
+            Spacer()
+
+            Button {
+                Task {
+                    await alertManager.toggle(events: viewModel.events, league: viewModel.selectedLeague)
+                }
+            } label: {
+                Image(systemName: alertManager.isEnabled ? "bell.fill" : "bell")
+                    .font(.headline.weight(.black))
+                    .foregroundStyle(alertManager.isEnabled ? Color.pitchBackground : .white)
+                    .frame(width: 44, height: 44)
+                    .background(alertManager.isEnabled ? Color.pitchAccent : Color.pitchSurface)
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            }
+            .buttonStyle(.plain)
+
+            if viewModel.isLoading {
+                ProgressView()
+                    .tint(Color.pitchAccent)
+                    .padding(.top, 8)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.top, 14)
+    }
+
+    private var searchField: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "magnifyingglass")
+                .font(.subheadline.weight(.bold))
+                .foregroundStyle(.secondary)
+            TextField("Search teams, matches, news", text: $viewModel.searchText)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .foregroundStyle(.white)
+        }
+        .padding(.horizontal, 12)
+        .frame(height: 46)
+        .background(Color.pitchSurface)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 
     private var leagueStrip: some View {
@@ -47,7 +98,10 @@ struct ContentView: View {
             HStack(spacing: 8) {
                 ForEach(nativeLeagues) { league in
                     Button {
-                        viewModel.select(league)
+                        Task {
+                            await viewModel.select(league)
+                            alertManager.refresh(events: viewModel.events, league: viewModel.selectedLeague)
+                        }
                     } label: {
                         Text(league.name)
                             .font(.subheadline.weight(.black))
@@ -76,16 +130,13 @@ struct ContentView: View {
             HStack(spacing: 10) {
                 stat(label: "Matches", value: "\(viewModel.events.count)")
                 stat(label: "Live", value: "\(viewModel.events.filter { $0.status?.type?.state == "in" }.count)")
-                stat(label: "League", value: viewModel.selectedLeague.id.uppercased())
+                stat(label: "Teams", value: "\(viewModel.standings.count)")
             }
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.pitchCard)
-        .overlay(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .stroke(Color.white.opacity(0.08), lineWidth: 1)
-        )
+        .overlay(cardStroke(10))
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
@@ -106,35 +157,116 @@ struct ContentView: View {
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 
+    private var tabPicker: some View {
+        HStack(spacing: 8) {
+            ForEach(AppTab.allCases) { tab in
+                Button {
+                    viewModel.activeTab = tab
+                } label: {
+                    Label(tab.rawValue, systemImage: icon(for: tab))
+                        .font(.caption.weight(.black))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 44)
+                        .foregroundStyle(viewModel.activeTab == tab ? Color.pitchBackground : .secondary)
+                        .background(viewModel.activeTab == tab ? .white : Color.pitchSurface)
+                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var activeSection: some View {
+        switch viewModel.activeTab {
+        case .matches:
+            matchSection
+        case .table:
+            standingsSection
+        case .news:
+            newsSection
+        }
+    }
+
     private var matchSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("FIXTURES")
-                        .font(.caption2.weight(.black))
-                        .foregroundStyle(Color.pitchAccent)
-                    Text("\(viewModel.selectedLeague.name) Matches")
-                        .font(.title3.weight(.black))
-                        .foregroundStyle(.white)
-                }
-                Spacer()
-                if viewModel.isLoading {
-                    ProgressView()
-                        .tint(Color.pitchAccent)
-                }
-            }
+            SectionTitle(kicker: "Fixtures", title: "\(viewModel.selectedLeague.name) Matches")
 
-            if let errorMessage = viewModel.errorMessage {
+            if let errorMessage = viewModel.errorMessage, viewModel.events.isEmpty {
                 StateCard(title: "ESPN error", detail: errorMessage)
-            } else if viewModel.events.isEmpty && !viewModel.isLoading {
-                StateCard(title: "No matches", detail: "ESPN did not return fixtures for this league right now.")
+            } else if viewModel.filteredEvents.isEmpty && !viewModel.isLoading {
+                StateCard(title: "No matches", detail: "ESPN did not return matching fixtures.")
             } else {
                 LazyVStack(spacing: 10) {
-                    ForEach(viewModel.events) { event in
-                        MatchCard(event: event)
+                    ForEach(viewModel.filteredEvents) { event in
+                        Button {
+                            selectedEvent = event
+                        } label: {
+                            MatchCard(event: event)
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
             }
+        }
+    }
+
+    private var standingsSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            SectionTitle(kicker: "Table", title: "\(viewModel.selectedLeague.name) Standings")
+
+            if viewModel.filteredStandings.isEmpty && !viewModel.isLoading {
+                StateCard(title: "No table available", detail: "ESPN does not expose standings for every competition.")
+            } else {
+                LazyVStack(spacing: 0) {
+                    ForEach(Array(viewModel.filteredStandings.enumerated()), id: \.element.id) { index, entry in
+                        StandingRow(entry: entry, fallbackRank: index + 1)
+                    }
+                }
+                .background(Color.pitchSurface)
+                .overlay(cardStroke(10))
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            }
+        }
+    }
+
+    private var newsSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            SectionTitle(kicker: "Stories", title: "\(viewModel.selectedLeague.name) News")
+
+            if viewModel.filteredArticles.isEmpty && !viewModel.isLoading {
+                StateCard(title: "No news available", detail: "ESPN did not return matching articles.")
+            } else {
+                LazyVStack(spacing: 10) {
+                    ForEach(viewModel.filteredArticles.prefix(12)) { article in
+                        NewsCard(article: article)
+                    }
+                }
+            }
+        }
+    }
+
+    private func icon(for tab: AppTab) -> String {
+        switch tab {
+        case .matches: return "rectangle.grid.1x2"
+        case .table: return "tablecells"
+        case .news: return "newspaper"
+        }
+    }
+}
+
+struct SectionTitle: View {
+    let kicker: String
+    let title: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(kicker.uppercased())
+                .font(.caption2.weight(.black))
+                .foregroundStyle(Color.pitchAccent)
+            Text(title)
+                .font(.title3.weight(.black))
+                .foregroundStyle(.white)
         }
     }
 }
@@ -142,16 +274,8 @@ struct ContentView: View {
 struct MatchCard: View {
     let event: ScoreEvent
 
-    private var home: Competitor? {
-        competitors.first(where: { $0.homeAway == "home" }) ?? competitors.first
-    }
-
-    private var away: Competitor? {
-        competitors.first(where: { $0.homeAway == "away" }) ?? competitors.dropFirst().first
-    }
-
-    private var competitors: [Competitor] {
-        event.competition?.competitors ?? []
+    private var teams: MatchTeams {
+        event.matchTeams
     }
 
     private var isPre: Bool {
@@ -171,11 +295,11 @@ struct MatchCard: View {
                     .lineLimit(1)
             }
 
-            teamLine(home)
-            teamLine(away)
+            teamLine(teams.home)
+            teamLine(teams.away)
 
             if let venue = event.competition?.venue?.fullName ?? event.competition?.venue?.displayName {
-                Text(venue)
+                Label(venue, systemImage: "mappin.and.ellipse")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -184,10 +308,7 @@ struct MatchCard: View {
         }
         .padding(14)
         .background(Color.pitchSurface)
-        .overlay(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .stroke(Color.white.opacity(0.08), lineWidth: 1)
-        )
+        .overlay(cardStroke(10))
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
@@ -199,19 +320,10 @@ struct MatchCard: View {
 
     private func teamLine(_ competitor: Competitor?) -> some View {
         HStack(spacing: 10) {
-            AsyncImage(url: URL(string: competitor?.team?.logo ?? competitor?.team?.logos?.first?.href ?? "")) { image in
-                image
-                    .resizable()
-                    .scaledToFit()
-            } placeholder: {
-                Circle()
-                    .fill(Color.white.opacity(0.08))
-                    .overlay(Text(competitor?.team?.abbreviation ?? "-").font(.caption2.weight(.black)))
-            }
-            .frame(width: 34, height: 34)
+            TeamBadge(team: competitor?.team)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(competitor?.team?.shortDisplayName ?? competitor?.team?.displayName ?? "TBA")
+                Text(competitor?.team?.bestName ?? "TBA")
                     .font(.headline.weight(.heavy))
                     .foregroundStyle(.white)
                     .lineLimit(1)
@@ -228,6 +340,125 @@ struct MatchCard: View {
                 .foregroundStyle(.white)
                 .monospacedDigit()
         }
+    }
+}
+
+struct TeamBadge: View {
+    let team: Team?
+
+    var body: some View {
+        AsyncImage(url: URL(string: team?.bestLogo ?? "")) { image in
+            image
+                .resizable()
+                .scaledToFit()
+        } placeholder: {
+            Circle()
+                .fill(Color.white.opacity(0.08))
+                .overlay(Text(team?.abbreviation ?? "-").font(.caption2.weight(.black)))
+        }
+        .frame(width: 34, height: 34)
+    }
+}
+
+struct StandingRow: View {
+    let entry: StandingEntry
+    let fallbackRank: Int
+
+    private var stats: [String: StandingStat] {
+        Dictionary(uniqueKeysWithValues: (entry.stats ?? []).compactMap { stat in
+            guard let name = stat.name else { return nil }
+            return (name, stat)
+        })
+    }
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Text(value("rank", fallback: "\(fallbackRank)"))
+                .font(.subheadline.weight(.black))
+                .foregroundStyle(.secondary)
+                .frame(width: 26, alignment: .leading)
+
+            TeamBadge(team: entry.team)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(entry.team?.bestName ?? "Team")
+                    .font(.subheadline.weight(.black))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                Text(recordText)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
+            Spacer()
+
+            VStack(alignment: .trailing, spacing: 2) {
+                Text(value("points", fallback: "-"))
+                    .font(.headline.weight(.black))
+                    .foregroundStyle(.white)
+                Text("PTS")
+                    .font(.caption2.weight(.black))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.horizontal, 12)
+        .frame(minHeight: 56)
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(Color.white.opacity(0.06))
+                .frame(height: 1)
+        }
+    }
+
+    private var recordText: String {
+        let played = value("gamesPlayed", fallback: "-")
+        let wins = value("wins", fallback: "-")
+        let ties = value("ties", fallback: "-")
+        let losses = value("losses", fallback: "-")
+        let diff = value("pointDifferential", fallback: "-")
+        return "GP \(played)  \(wins)-\(ties)-\(losses)  GD \(diff)"
+    }
+
+    private func value(_ name: String, fallback: String) -> String {
+        stats[name]?.displayValue ?? stats[name]?.summary ?? stats[name]?.value.map { String(Int($0)) } ?? fallback
+    }
+}
+
+struct NewsCard: View {
+    let article: NewsArticle
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if let url = URL(string: article.images?.first?.url ?? "") {
+                AsyncImage(url: url) { image in
+                    image
+                        .resizable()
+                        .scaledToFill()
+                } placeholder: {
+                    Rectangle().fill(Color.white.opacity(0.06))
+                }
+                .frame(height: 138)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            }
+
+            Text(article.headline ?? "ESPN story")
+                .font(.headline.weight(.black))
+                .foregroundStyle(.white)
+                .lineLimit(2)
+
+            if let description = article.description, !description.isEmpty {
+                Text(description)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(3)
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.pitchSurface)
+        .overlay(cardStroke(10))
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 }
 
@@ -249,6 +480,11 @@ struct StateCard: View {
         .background(Color.pitchSurface)
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
+}
+
+func cardStroke(_ radius: CGFloat) -> some View {
+    RoundedRectangle(cornerRadius: radius, style: .continuous)
+        .stroke(Color.white.opacity(0.08), lineWidth: 1)
 }
 
 extension Color {

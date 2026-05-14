@@ -30,12 +30,22 @@ On Windows, use the `Build Native iOS IPA` GitHub Actions workflow.
 
 ## Notes
 
-This is a starter native app, not a full rewrite yet. The next native features should be ported feature-by-feature from the web app:
+Current native features:
 
-- Match details
-- Timeline
-- Stats
-- Lineups pitch
+- ESPN scoreboard
+- League switching
+- Team/match/news search
+- Matches tab
+- Standings tab
+- News tab
+- Match detail sheet
+- Match timeline when ESPN summary data exists
+- Match stats when ESPN box score data exists
+- Native kickoff notification scheduling
+
+Still to port from the web app:
+
+- Native lineup pitch
 - Team pages
-- Search
-- Widgets and notifications
+- Odds display
+- Native WidgetKit target wired into this new native app
