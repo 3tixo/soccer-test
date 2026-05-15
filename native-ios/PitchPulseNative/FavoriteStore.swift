@@ -21,6 +21,10 @@ final class FavoriteStore: ObservableObject {
         return teamIds.contains(id)
     }
 
+    var hasFavorites: Bool {
+        !teamIds.isEmpty
+    }
+
     func toggle(_ team: Team?) {
         guard let id = team?.stableId else { return }
         if teamIds.contains(id) {

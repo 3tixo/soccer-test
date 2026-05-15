@@ -21,10 +21,7 @@ struct MatchDetailView: View {
                     scoreboard
 
                     if isLoading {
-                        ProgressView()
-                            .tint(Color.pitchAccent)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 24)
+                        detailLoadingBlock
                     }
 
                     if let errorMessage {
@@ -77,6 +74,18 @@ struct MatchDetailView: View {
 
                 detailTeam(teams.away)
             }
+
+            HStack(spacing: 8) {
+                Label(shortDate(event.date), systemImage: "calendar")
+                    .lineLimit(1)
+                if let venue = event.competition?.venue?.fullName ?? event.competition?.venue?.displayName {
+                    Label(venue, systemImage: "mappin.and.ellipse")
+                        .lineLimit(1)
+                }
+            }
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(16)
         .frame(maxWidth: .infinity)
@@ -108,16 +117,47 @@ struct MatchDetailView: View {
 
     private var timelineBlock: some View {
         DetailBlock(title: "Timeline") {
-            let events = timelineEvents
-            if events.isEmpty {
+            let sections = timelineSections
+            if sections.isEmpty {
                 StateCard(title: "No timeline yet", detail: "SofaScore has not published match events for this fixture.")
             } else {
-                VStack(spacing: 0) {
-                    ForEach(Array(events.enumerated()), id: \.offset) { _, item in
-                        TimelineRow(event: item)
+                VStack(alignment: .leading, spacing: 10) {
+                    ForEach(Array(sections.enumerated()), id: \.offset) { _, section in
+                        VStack(alignment: .leading, spacing: 0) {
+                            Text(section.title.uppercased())
+                                .font(.caption2.weight(.black))
+                                .foregroundStyle(.secondary)
+                                .padding(.vertical, 5)
+                            ForEach(Array(section.events.enumerated()), id: \.offset) { _, item in
+                                TimelineRow(event: item)
+                            }
+                        }
                     }
                 }
             }
+        }
+    }
+
+    private var detailLoadingBlock: some View {
+        DetailBlock(title: "Loading details") {
+            VStack(spacing: 10) {
+                ForEach(0..<3, id: \.self) { _ in
+                    HStack(spacing: 10) {
+                        RoundedRectangle(cornerRadius: 4, style: .continuous)
+                            .fill(Color.white.opacity(0.08))
+                            .frame(width: 42, height: 12)
+                        VStack(alignment: .leading, spacing: 6) {
+                            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                                .fill(Color.white.opacity(0.10))
+                                .frame(height: 12)
+                            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                                .fill(Color.white.opacity(0.06))
+                                .frame(width: 160, height: 10)
+                        }
+                    }
+                }
+            }
+            .redacted(reason: .placeholder)
         }
     }
 
@@ -239,6 +279,20 @@ struct MatchDetailView: View {
             .sortedByClock
     }
 
+    private var timelineSections: [TimelineSection] {
+        let grouped = Dictionary(grouping: timelineEvents) { event -> String in
+            let minute = event.clock?.value ?? event.time?.value ?? 0
+            if minute <= 45 { return "First half" }
+            if minute <= 90 { return "Second half" }
+            return "Extra time"
+        }
+
+        return ["First half", "Second half", "Extra time"].compactMap { title in
+            let events = grouped[title] ?? []
+            return events.isEmpty ? nil : TimelineSection(title: title, events: events)
+        }
+    }
+
     private var matchStatRows: [MatchStatItem] {
         guard let teams = summary?.boxscore?.teams, teams.count >= 2 else {
             return []
@@ -250,22 +304,22 @@ struct MatchDetailView: View {
 
         let homeStats = statMap(homeTeam.statistics)
         let awayStats = statMap(awayTeam.statistics)
-        let definitions = [
-            ("Expected goals", "expectedGoals", ""),
-            ("Possession", "ballPossession", ""),
-            ("Shots", "totalShotsOnGoal", ""),
-            ("On target", "shotsOnGoal", ""),
-            ("Big chances", "bigChanceCreated", ""),
-            ("Corners", "cornerKicks", ""),
-            ("Fouls", "fouls", ""),
-            ("Yellow cards", "yellowCards", ""),
-            ("Red cards", "redCards", ""),
-            ("Passes", "passes", ""),
-            ("Tackles", "totalTackle", "")
+        let definitions: [(String, [String], String)] = [
+            ("Expected goals", ["expectedGoals", "xg", "Expected goals"], ""),
+            ("Possession", ["ballPossession", "Possession"], ""),
+            ("Shots", ["totalShotsOnGoal", "totalShots", "Total shots"], ""),
+            ("On target", ["shotsOnGoal", "Shots on target"], ""),
+            ("Big chances", ["bigChanceCreated", "Big chances"], ""),
+            ("Corners", ["cornerKicks", "Corner kicks"], ""),
+            ("Fouls", ["fouls", "Fouls"], ""),
+            ("Yellow cards", ["yellowCards", "Yellow cards"], ""),
+            ("Red cards", ["redCards", "Red cards"], ""),
+            ("Passes", ["passes", "Passes"], ""),
+            ("Tackles", ["totalTackle", "Tackles"], "")
         ]
 
-        return definitions.compactMap { label, name, suffix in
-            guard let home = homeStats[name], let away = awayStats[name] else { return nil }
+        return definitions.compactMap { label, names, suffix in
+            guard let home = firstStat(homeStats, names: names), let away = firstStat(awayStats, names: names) else { return nil }
             return MatchStatItem(
                 label: label,
                 home: displayValue(home, suffix: suffix),
@@ -274,6 +328,18 @@ struct MatchDetailView: View {
                 awayValue: away.numericValue
             )
         }
+    }
+
+    private func firstStat(_ stats: [String: GameStatistic], names: [String]) -> GameStatistic? {
+        for name in names {
+            if let stat = stats[name] {
+                return stat
+            }
+            if let match = stats.first(where: { $0.key.caseInsensitiveCompare(name) == .orderedSame }) {
+                return match.value
+            }
+        }
+        return nil
     }
 
     private var pickedOdds: OddsItem? {
@@ -323,6 +389,11 @@ enum MatchDetailTab: String, CaseIterable, Identifiable {
     case news = "News"
 
     var id: String { rawValue }
+}
+
+struct TimelineSection {
+    let title: String
+    let events: [TimelineEvent]
 }
 
 struct DetailBlock<Content: View>: View {

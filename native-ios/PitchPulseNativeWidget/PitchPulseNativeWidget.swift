@@ -47,21 +47,33 @@ enum WidgetLeagueOption: String, AppEnum {
 
 enum WidgetDisplayOption: String, AppEnum {
     case liveFirst
+    case liveOnly
     case nextMatch
     case latestResult
+    case teamNextMatch
+    case teamLatestResult
+    case teamLiveOnly
 
     static var typeDisplayRepresentation = TypeDisplayRepresentation(name: "Display")
     static var caseDisplayRepresentations: [WidgetDisplayOption: DisplayRepresentation] = [
         .liveFirst: "Live first",
+        .liveOnly: "Live only",
         .nextMatch: "Next match",
-        .latestResult: "Latest result"
+        .latestResult: "Latest result",
+        .teamNextMatch: "Team next match",
+        .teamLatestResult: "Team latest result",
+        .teamLiveOnly: "Team live only"
     ]
 
     var label: String {
         switch self {
         case .liveFirst: return "Live first"
+        case .liveOnly: return "Live only"
         case .nextMatch: return "Next match"
         case .latestResult: return "Latest result"
+        case .teamNextMatch: return "Team next"
+        case .teamLatestResult: return "Team latest"
+        case .teamLiveOnly: return "Team live"
         }
     }
 }
@@ -75,6 +87,9 @@ struct MatchWidgetIntent: WidgetConfigurationIntent {
 
     @Parameter(title: "Display", default: .liveFirst)
     var display: WidgetDisplayOption
+
+    @Parameter(title: "Team Filter", default: "")
+    var teamFilter: String
 }
 
 struct NativeWidgetEntry: TimelineEntry {
@@ -139,9 +154,9 @@ struct NativeWidgetProvider: AppIntentTimelineProvider {
             guard (response as? HTTPURLResponse)?.statusCode == 200,
                   let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let events = json["events"] as? [[String: Any]],
-                  let event = bestEvent(events, mode: configuration.display)
+                  let event = bestEvent(events, configuration: configuration)
             else {
-                return fallback("No matches", configuration: configuration)
+                return fallback("No matching match", configuration: configuration)
             }
 
             return await entry(from: event, configuration: configuration)
@@ -151,21 +166,44 @@ struct NativeWidgetProvider: AppIntentTimelineProvider {
     }
 }
 
-private func bestEvent(_ events: [[String: Any]], mode: WidgetDisplayOption) -> [String: Any]? {
-    switch mode {
+private func bestEvent(_ events: [[String: Any]], configuration: MatchWidgetIntent) -> [String: Any]? {
+    let filteredEvents = teamFilteredEvents(events, query: configuration.teamFilter)
+    let source = filteredEvents.isEmpty ? events : filteredEvents
+
+    switch configuration.display {
     case .liveFirst:
-        return events.first { state($0) == "in" }
-            ?? events.filter { state($0) == "pre" }.sorted(by: oldestEventFirst).first
-            ?? events.filter { state($0) == "post" }.sorted(by: newestEventFirst).first
-            ?? events.first
+        return source.first { state($0) == "in" }
+            ?? source.filter { state($0) == "pre" }.sorted(by: oldestEventFirst).first
+            ?? source.filter { state($0) == "post" }.sorted(by: newestEventFirst).first
+            ?? source.first
+    case .liveOnly:
+        return source.first { state($0) == "in" }
     case .nextMatch:
-        return events.filter { state($0) == "pre" }.sorted(by: oldestEventFirst).first
-            ?? events.first { state($0) == "in" }
-            ?? events.first
+        return source.filter { state($0) == "pre" }.sorted(by: oldestEventFirst).first
+            ?? source.first { state($0) == "in" }
+            ?? source.first
     case .latestResult:
-        return events.filter { state($0) == "post" }.sorted(by: newestEventFirst).first
-            ?? events.first { state($0) == "in" }
-            ?? events.first
+        return source.filter { state($0) == "post" }.sorted(by: newestEventFirst).first
+            ?? source.first { state($0) == "in" }
+            ?? source.first
+    case .teamNextMatch:
+        return filteredEvents.filter { state($0) == "pre" }.sorted(by: oldestEventFirst).first
+            ?? filteredEvents.first { state($0) == "in" }
+    case .teamLatestResult:
+        return filteredEvents.filter { state($0) == "post" }.sorted(by: newestEventFirst).first
+            ?? filteredEvents.first { state($0) == "in" }
+    case .teamLiveOnly:
+        return filteredEvents.first { state($0) == "in" }
+    }
+}
+
+private func teamFilteredEvents(_ events: [[String: Any]], query: String) -> [[String: Any]] {
+    let needle = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    guard !needle.isEmpty else { return [] }
+    return events.filter { event in
+        let home = teamName(event["homeTeam"] as? [String: Any] ?? [:]).lowercased()
+        let away = teamName(event["awayTeam"] as? [String: Any] ?? [:]).lowercased()
+        return home.contains(needle) || away.contains(needle)
     }
 }
 
@@ -176,8 +214,8 @@ private func entry(from event: [String: Any], configuration: MatchWidgetIntent) 
     let live = state(event) == "in"
     let homeScore = isPre ? "-" : scoreText(event["homeScore"] as? [String: Any])
     let awayScore = isPre ? "-" : scoreText(event["awayScore"] as? [String: Any])
-    async let homeLogo = logoData(for: home)
-    async let awayLogo = logoData(for: away)
+    let homeLogo = await logoData(for: home)
+    let awayLogo = await logoData(for: away)
 
     return NativeWidgetEntry(
         date: Date(),
@@ -191,8 +229,8 @@ private func entry(from event: [String: Any], configuration: MatchWidgetIntent) 
         away: teamName(away),
         homeScore: homeScore,
         awayScore: awayScore,
-        homeLogoData: await homeLogo,
-        awayLogoData: await awayLogo
+        homeLogoData: homeLogo,
+        awayLogoData: awayLogo
     )
 }
 
@@ -296,12 +334,12 @@ private func matchDetail(event: [String: Any], homeScore: String, awayScore: Str
         return "Live now"
     case "post":
         if let home = Int(homeScore), let away = Int(awayScore) {
-            if home == away { return "Full time • Draw" }
-            return home > away ? "Full time • Home won" : "Full time • Away won"
+            if home == away { return "Full time - Draw" }
+            return home > away ? "Full time - Home won" : "Full time - Away won"
         }
         return "Full time"
     default:
-        return "Kickoff • \(kickoffTime(timestampValue(event["startTimestamp"])))"
+        return "Kickoff - \(kickoffTime(timestampValue(event["startTimestamp"])))"
     }
 }
 

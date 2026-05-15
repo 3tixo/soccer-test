@@ -24,6 +24,7 @@ struct TeamDetailView: View {
                 VStack(alignment: .leading, spacing: 14) {
                     hero
                     snapshot
+                    nextMatchBlock
                     if isLoadingDetails {
                         ProgressView()
                             .tint(Color.pitchAccent)
@@ -87,6 +88,10 @@ struct TeamDetailView: View {
                 clubTile(label: "Standing", value: standingSummary.isEmpty ? "-" : standingSummary)
                 clubTile(label: "Record", value: recordSummary)
             }
+            HStack(spacing: 10) {
+                clubTile(label: "Played", value: statValue("gamesPlayed") ?? "-")
+                clubTile(label: "Points", value: statValue("points") ?? "-")
+            }
         }
     }
 
@@ -110,7 +115,7 @@ struct TeamDetailView: View {
     private var formBlock: some View {
         DetailBlock(title: "Recent form") {
             let form = recentFormEvents
-                .prefix(8)
+                .prefix(6)
                 .map { result(for: $0) }
 
             if form.isEmpty {
@@ -130,14 +135,32 @@ struct TeamDetailView: View {
         }
     }
 
+    private var nextMatchBlock: some View {
+        DetailBlock(title: "Next match") {
+            if let nextMatch {
+                scheduleRow(nextMatch)
+            } else {
+                StateCard(title: "No upcoming match", detail: "SofaScore did not return a future fixture for this club.")
+            }
+        }
+    }
+
     private var scheduleBlock: some View {
         DetailBlock(title: "Schedule") {
-            if scheduleDisplayEvents.isEmpty {
+            let groups = scheduleGroups
+            if groups.isEmpty {
                 StateCard(title: "No matches", detail: "SofaScore did not return a team schedule.")
             } else {
-                VStack(spacing: 8) {
-                    ForEach(scheduleDisplayEvents.prefix(8)) { event in
-                        scheduleRow(event)
+                VStack(alignment: .leading, spacing: 12) {
+                    ForEach(Array(groups.prefix(5).enumerated()), id: \.offset) { _, group in
+                        VStack(alignment: .leading, spacing: 7) {
+                            Text(group.title.uppercased())
+                                .font(.caption2.weight(.black))
+                                .foregroundStyle(.secondary)
+                            ForEach(Array(group.events.enumerated()), id: \.offset) { _, event in
+                                scheduleRow(event)
+                            }
+                        }
                     }
                 }
             }
@@ -268,6 +291,27 @@ struct TeamDetailView: View {
         return loadedEvents.sorted(by: newestFirst)
     }
 
+    private var nextMatch: ScoreEvent? {
+        loadedEvents
+            .filter { $0.status?.type?.completed != true }
+            .sorted(by: oldestFirst)
+            .first
+    }
+
+    private var scheduleGroups: [ScheduleDaySection] {
+        let grouped = Dictionary(grouping: Array(scheduleDisplayEvents.prefix(12))) { event in
+            shortDate(event.date)
+        }
+        return grouped
+            .map { ScheduleDaySection(title: $0.key, events: $0.value.sorted(by: oldestFirst)) }
+            .sorted { first, second in
+                guard let firstDate = first.events.first, let secondDate = second.events.first else {
+                    return first.title < second.title
+                }
+                return oldestFirst(firstDate, secondDate)
+            }
+    }
+
     private var loadedArticles: [NewsArticle] {
         teamArticles.isEmpty ? context.articles : teamArticles
     }
@@ -299,4 +343,9 @@ struct TeamDetailView: View {
         }
         return parsed
     }
+}
+
+struct ScheduleDaySection {
+    let title: String
+    let events: [ScoreEvent]
 }

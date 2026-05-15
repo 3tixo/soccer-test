@@ -36,11 +36,11 @@ struct ContentView: View {
             }
             .task {
                 await viewModel.load()
-                alertManager.refresh(events: viewModel.events, league: viewModel.selectedLeague)
+                alertManager.refresh(events: viewModel.events, league: viewModel.selectedLeague, favoriteStore: favoriteStore)
             }
             .refreshable {
                 await viewModel.load()
-                alertManager.refresh(events: viewModel.events, league: viewModel.selectedLeague)
+                alertManager.refresh(events: viewModel.events, league: viewModel.selectedLeague, favoriteStore: favoriteStore)
             }
             .sheet(item: $selectedMatch) { selection in
                 MatchDetailView(event: selection.event, league: selection.league)
@@ -79,7 +79,7 @@ struct ContentView: View {
 
             Button {
                 Task {
-                    await alertManager.toggle(events: viewModel.events, league: viewModel.selectedLeague)
+                    await alertManager.toggle(events: viewModel.events, league: viewModel.selectedLeague, favoriteStore: favoriteStore)
                 }
             } label: {
                 Image(systemName: alertManager.isEnabled ? "bell.fill" : "bell")
@@ -124,7 +124,7 @@ struct ContentView: View {
                     Button {
                         Task {
                             await viewModel.select(league)
-                            alertManager.refresh(events: viewModel.events, league: viewModel.selectedLeague)
+                            alertManager.refresh(events: viewModel.events, league: viewModel.selectedLeague, favoriteStore: favoriteStore)
                         }
                     } label: {
                         Text(league.name)
@@ -147,7 +147,7 @@ struct ContentView: View {
             Button {
                 Task {
                     await viewModel.shiftDate(by: -1)
-                    alertManager.refresh(events: viewModel.events, league: viewModel.selectedLeague)
+                    alertManager.refresh(events: viewModel.events, league: viewModel.selectedLeague, favoriteStore: favoriteStore)
                 }
             } label: {
                 Image(systemName: "chevron.left")
@@ -172,7 +172,7 @@ struct ContentView: View {
             Button {
                 Task {
                     await viewModel.goToToday()
-                    alertManager.refresh(events: viewModel.events, league: viewModel.selectedLeague)
+                    alertManager.refresh(events: viewModel.events, league: viewModel.selectedLeague, favoriteStore: favoriteStore)
                 }
             } label: {
                 Text("Today")
@@ -186,7 +186,7 @@ struct ContentView: View {
             Button {
                 Task {
                     await viewModel.shiftDate(by: 1)
-                    alertManager.refresh(events: viewModel.events, league: viewModel.selectedLeague)
+                    alertManager.refresh(events: viewModel.events, league: viewModel.selectedLeague, favoriteStore: favoriteStore)
                 }
             } label: {
                 Image(systemName: "chevron.right")
