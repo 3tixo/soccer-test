@@ -168,7 +168,8 @@ struct NativeWidgetProvider: AppIntentTimelineProvider {
 
 private func bestEvent(_ events: [[String: Any]], configuration: MatchWidgetIntent) -> [String: Any]? {
     let filteredEvents = teamFilteredEvents(events, query: configuration.teamFilter)
-    let source = filteredEvents.isEmpty ? events : filteredEvents
+    let hasTeamFilter = !configuration.teamFilter.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    let source = hasTeamFilter ? filteredEvents : events
 
     switch configuration.display {
     case .liveFirst:
@@ -187,13 +188,15 @@ private func bestEvent(_ events: [[String: Any]], configuration: MatchWidgetInte
             ?? source.first { state($0) == "in" }
             ?? source.first
     case .teamNextMatch:
-        return filteredEvents.filter { state($0) == "pre" }.sorted(by: oldestEventFirst).first
-            ?? filteredEvents.first { state($0) == "in" }
+        return source.filter { state($0) == "pre" }.sorted(by: oldestEventFirst).first
+            ?? source.first { state($0) == "in" }
+            ?? source.first
     case .teamLatestResult:
-        return filteredEvents.filter { state($0) == "post" }.sorted(by: newestEventFirst).first
-            ?? filteredEvents.first { state($0) == "in" }
+        return source.filter { state($0) == "post" }.sorted(by: newestEventFirst).first
+            ?? source.first { state($0) == "in" }
+            ?? source.first
     case .teamLiveOnly:
-        return filteredEvents.first { state($0) == "in" }
+        return source.first { state($0) == "in" }
     }
 }
 

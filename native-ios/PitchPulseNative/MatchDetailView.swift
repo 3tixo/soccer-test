@@ -9,6 +9,7 @@ struct MatchDetailView: View {
     @State private var isLoading = true
     @State private var errorMessage: String?
     @State private var activeTab: MatchDetailTab = .summary
+    @State private var selectedShotHome = true
 
     private let service = SofaScoreService()
 
@@ -53,9 +54,11 @@ struct MatchDetailView: View {
 
                 VStack(spacing: 4) {
                     Text(scoreText)
-                        .font(.system(size: 34, weight: .black, design: .rounded))
+                        .font(.system(size: event.status?.type?.state == "pre" ? 23 : 34, weight: .black, design: .rounded))
                         .foregroundStyle(.white)
                         .monospacedDigit()
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.62)
                     Text(event.status?.statusPillText ?? "Scheduled")
                         .font(.caption.weight(.black))
                         .foregroundStyle(event.status?.isLive == true ? .white : .secondary)
@@ -70,7 +73,7 @@ struct MatchDetailView: View {
                             }
                         }
                 }
-                .frame(minWidth: 86)
+                .frame(minWidth: 104)
 
                 detailTeam(teams.away)
             }
@@ -213,9 +216,13 @@ struct MatchDetailView: View {
     private var statsBlock: some View {
         DetailBlock(title: "Match stats") {
             let rows = matchStatRows
-            if rows.isEmpty {
+            if let shots = summary?.shotmap, !shots.isEmpty {
+                ShotMapBoard(event: event, shots: shots, selectedHome: $selectedShotHome)
+            }
+
+            if rows.isEmpty && (summary?.shotmap ?? []).isEmpty {
                 StateCard(title: "No stats yet", detail: "Stats appear when SofaScore publishes official match data.")
-            } else {
+            } else if !rows.isEmpty {
                 VStack(spacing: 12) {
                     ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
                         MatchStatRow(row: row)
@@ -518,6 +525,316 @@ struct MatchStatRow: View {
             }
             .frame(height: 5)
         }
+    }
+}
+
+struct ShotMapBoard: View {
+    let event: ScoreEvent
+    let shots: [ShotMapItem]
+    @Binding var selectedHome: Bool
+    @State private var selectedShotId: String?
+
+    private var teams: MatchTeams {
+        event.matchTeams
+    }
+
+    private var homeShots: [ShotMapItem] {
+        shots.filter { $0.isHome == true }
+    }
+
+    private var awayShots: [ShotMapItem] {
+        shots.filter { $0.isHome == false }
+    }
+
+    private var displayShots: [ShotMapItem] {
+        let sideShots = selectedHome ? homeShots : awayShots
+        return sideShots.isEmpty ? shots : sideShots
+    }
+
+    private var selectedShot: ShotMapItem? {
+        displayShots.first { $0.id == selectedShotId } ?? displayShots.first
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("Shots")
+                    .font(.subheadline.weight(.black))
+                    .foregroundStyle(.white)
+                Spacer()
+                teamSelector
+            }
+
+            shotPitch
+
+            if let selectedShot {
+                ShotDetailCard(shot: selectedShot)
+            }
+        }
+        .onAppear {
+            if homeShots.isEmpty && !awayShots.isEmpty {
+                selectedHome = false
+            }
+            selectedShotId = selectedShot?.id
+        }
+        .onChange(of: selectedHome) { _ in
+            selectedShotId = displayShots.first?.id
+        }
+    }
+
+    private var teamSelector: some View {
+        HStack(spacing: 4) {
+            shotTeamButton(team: teams.home?.team, isHome: true, disabled: homeShots.isEmpty)
+            shotTeamButton(team: teams.away?.team, isHome: false, disabled: awayShots.isEmpty)
+        }
+        .padding(3)
+        .background(Color.white.opacity(0.08))
+        .clipShape(Capsule())
+    }
+
+    private func shotTeamButton(team: Team?, isHome: Bool, disabled: Bool) -> some View {
+        Button {
+            selectedHome = isHome
+        } label: {
+            TeamBadge(team: team)
+                .frame(width: 28, height: 28)
+                .opacity(disabled ? 0.35 : 1)
+                .padding(.horizontal, 8)
+                .frame(height: 32)
+                .background(selectedHome == isHome ? Color.white.opacity(0.92) : Color.clear)
+                .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .disabled(disabled)
+    }
+
+    private var shotPitch: some View {
+        GeometryReader { proxy in
+            let width = proxy.size.width
+            let fieldTop: CGFloat = 34
+            let fieldHeight = proxy.size.height - fieldTop
+            let selected = selectedShot
+
+            ZStack(alignment: .top) {
+                ShotGoalNet()
+                    .frame(width: min(width * 0.32, 98), height: 34)
+                    .position(x: width / 2, y: 17)
+
+                ZStack {
+                    ShotGrass()
+                    ShotPitchLines()
+                        .stroke(Color(red: 0.06, green: 0.13, blue: 0.08), lineWidth: 1.2)
+                }
+                .frame(width: width, height: fieldHeight)
+                .clipShape(RoundedRectangle(cornerRadius: 0, style: .continuous))
+                .position(x: width / 2, y: fieldTop + fieldHeight / 2)
+
+                if let selected {
+                    let start = point(for: selected, width: width, height: fieldHeight, offsetY: fieldTop)
+                    let target = targetPoint(for: selected, width: width, offsetY: fieldTop)
+                    Path { path in
+                        path.move(to: start)
+                        path.addLine(to: target)
+                    }
+                    .stroke(Color.white.opacity(0.86), style: StrokeStyle(lineWidth: 1.3, dash: [3, 4]))
+                }
+
+                ForEach(displayShots) { shot in
+                    Button {
+                        selectedShotId = shot.id
+                    } label: {
+                        ShotDot(shot: shot, selected: shot.id == selected?.id)
+                    }
+                    .buttonStyle(.plain)
+                    .position(point(for: shot, width: width, height: fieldHeight, offsetY: fieldTop))
+                }
+            }
+        }
+        .frame(height: 292)
+        .background(Color.black.opacity(0.24))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private func point(for shot: ShotMapItem, width: CGFloat, height: CGFloat, offsetY: CGFloat) -> CGPoint {
+        let rawX = clamp(shot.playerCoordinates?.x ?? 50)
+        let rawY = clamp(shot.playerCoordinates?.y ?? 50)
+        let leftValue = shot.isHome == false ? 100 - rawY : rawY
+        let topValue = 100 - rawX
+        return CGPoint(
+            x: width * CGFloat(leftValue / 100),
+            y: offsetY + height * CGFloat(topValue / 100)
+        )
+    }
+
+    private func targetPoint(for shot: ShotMapItem, width: CGFloat, offsetY: CGFloat) -> CGPoint {
+        let rawY = clamp(shot.goalMouthCoordinates?.y ?? 50)
+        let leftValue = shot.isHome == false ? 100 - rawY : rawY
+        return CGPoint(x: width * CGFloat(leftValue / 100), y: offsetY + 2)
+    }
+
+    private func clamp(_ value: Double) -> Double {
+        min(max(value, 4), 96)
+    }
+}
+
+struct ShotGrass: View {
+    var body: some View {
+        GeometryReader { proxy in
+            VStack(spacing: 0) {
+                ForEach(0..<5, id: \.self) { index in
+                    Rectangle()
+                        .fill(index.isMultiple(of: 2) ? Color(red: 0.27, green: 0.43, blue: 0.28) : Color(red: 0.31, green: 0.49, blue: 0.32))
+                        .frame(height: proxy.size.height / 5)
+                }
+            }
+        }
+    }
+}
+
+struct ShotPitchLines: Shape {
+    func path(in rect: CGRect) -> Path {
+        func x(_ value: CGFloat) -> CGFloat { rect.minX + rect.width * value / 100 }
+        func y(_ value: CGFloat) -> CGFloat { rect.minY + rect.height * value / 100 }
+
+        var path = Path()
+        path.addRect(CGRect(x: x(5), y: y(8), width: rect.width * 0.90, height: rect.height * 0.82))
+        path.move(to: CGPoint(x: x(50), y: y(8)))
+        path.addLine(to: CGPoint(x: x(50), y: y(90)))
+        path.addArc(center: CGPoint(x: x(50), y: y(90)), radius: rect.width * 0.12, startAngle: .degrees(180), endAngle: .degrees(0), clockwise: true)
+        path.addRect(CGRect(x: x(24), y: y(8), width: rect.width * 0.52, height: rect.height * 0.28))
+        path.addRect(CGRect(x: x(37), y: y(8), width: rect.width * 0.26, height: rect.height * 0.13))
+        path.addArc(center: CGPoint(x: x(5), y: y(8)), radius: rect.width * 0.04, startAngle: .degrees(0), endAngle: .degrees(90), clockwise: false)
+        path.addArc(center: CGPoint(x: x(95), y: y(8)), radius: rect.width * 0.04, startAngle: .degrees(180), endAngle: .degrees(90), clockwise: true)
+        return path
+    }
+}
+
+struct ShotGoalNet: View {
+    var body: some View {
+        ZStack {
+            Rectangle()
+                .stroke(Color.white.opacity(0.92), lineWidth: 3)
+            GridPattern()
+                .stroke(Color.white.opacity(0.25), lineWidth: 0.8)
+                .padding(3)
+        }
+        .background(Color.black.opacity(0.36))
+        .mask(
+            Rectangle()
+                .padding(.bottom, -6)
+        )
+    }
+}
+
+struct GridPattern: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        for index in 1..<8 {
+            let x = rect.minX + rect.width * CGFloat(index) / 8
+            path.move(to: CGPoint(x: x, y: rect.minY))
+            path.addLine(to: CGPoint(x: x, y: rect.maxY))
+        }
+        for index in 1..<5 {
+            let y = rect.minY + rect.height * CGFloat(index) / 5
+            path.move(to: CGPoint(x: rect.minX, y: y))
+            path.addLine(to: CGPoint(x: rect.maxX, y: y))
+        }
+        return path
+    }
+}
+
+struct ShotDot: View {
+    let shot: ShotMapItem
+    let selected: Bool
+
+    var body: some View {
+        Circle()
+            .fill(fillColor)
+            .frame(width: selected ? 21 : 16, height: selected ? 21 : 16)
+            .overlay(Circle().stroke(borderColor, lineWidth: selected ? 3 : 2))
+            .shadow(color: borderColor.opacity(selected ? 0.45 : 0), radius: 4)
+    }
+
+    private var fillColor: Color {
+        if isGoal { return .white }
+        if (shot.shotType ?? "").lowercased().contains("save") { return Color(red: 0.85, green: 0.94, blue: 0.84) }
+        return Color(red: 0.72, green: 0.86, blue: 0.70)
+    }
+
+    private var borderColor: Color {
+        isGoal ? Color(red: 0.24, green: 0.78, blue: 0.32) : Color(red: 0.17, green: 0.40, blue: 0.20)
+    }
+
+    private var isGoal: Bool {
+        (shot.shotType ?? "").lowercased().contains("goal")
+    }
+}
+
+struct ShotDetailCard: View {
+    let shot: ShotMapItem
+
+    var body: some View {
+        VStack(spacing: 12) {
+            HStack {
+                Text(clock)
+                    .font(.headline.weight(.black))
+                    .foregroundStyle(.white)
+                Spacer()
+                Text(shot.player?.bestName ?? "Shot")
+                    .font(.subheadline.weight(.black))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+            }
+
+            HStack(spacing: 8) {
+                shotMetric("xG", value: formatted(shot.xg))
+                shotMetric("xGOT", value: formatted(shot.xgot))
+                shotMetric("Outcome", value: display(shot.shotType))
+            }
+
+            HStack(spacing: 8) {
+                shotMetric("Situation", value: display(shot.situation))
+                shotMetric("Shot type", value: display(shot.bodyPart))
+                shotMetric("Goal zone", value: display(shot.goalMouthLocation))
+            }
+        }
+        .padding(12)
+        .background(Color.black.opacity(0.36))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private func shotMetric(_ label: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(label)
+                .font(.caption2.weight(.black))
+                .foregroundStyle(.secondary)
+            Text(value)
+                .font(.caption.weight(.black))
+                .foregroundStyle(.white)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var clock: String {
+        guard let time = shot.time else { return "-" }
+        if let added = shot.addedTime, added > 0 {
+            return "\(time)' +\(added)"
+        }
+        return "\(time)'"
+    }
+
+    private func formatted(_ value: Double?) -> String {
+        guard let value else { return "-" }
+        return String(format: "%.2f", value)
+    }
+
+    private func display(_ value: String?) -> String {
+        guard let value, !value.isEmpty else { return "-" }
+        return value
+            .replacingOccurrences(of: "-", with: " ")
+            .capitalized
     }
 }
 

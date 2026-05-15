@@ -307,6 +307,7 @@ struct MatchSummary: Decodable {
     let news: NewsResponse?
     let odds: [OddsItem]?
     let rosters: [RosterGroup]?
+    let shotmap: [ShotMapItem]?
 }
 
 struct CommentaryItem: Decodable {
@@ -335,6 +336,91 @@ struct TimelineType: Decodable {
 struct TimelineClock: Decodable {
     let displayValue: String?
     let value: Double?
+}
+
+struct ShotMapItem: Decodable, Identifiable {
+    let id: String
+    let isHome: Bool?
+    let player: ShotPlayer?
+    let playerCoordinates: ShotCoordinates?
+    let goalMouthCoordinates: ShotCoordinates?
+    let shotType: String?
+    let situation: String?
+    let bodyPart: String?
+    let goalMouthLocation: String?
+    let xg: Double?
+    let xgot: Double?
+    let time: Int?
+    let addedTime: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case isHome
+        case player
+        case playerCoordinates
+        case goalMouthCoordinates
+        case shotType
+        case situation
+        case bodyPart
+        case goalMouthLocation
+        case xg
+        case xG
+        case xgot
+        case xGOT
+        case time
+        case addedTime
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        if let id = try? container.decodeIfPresent(Int.self, forKey: .id) {
+            self.id = String(id)
+        } else if let id = try? container.decodeIfPresent(Int64.self, forKey: .id) {
+            self.id = String(id)
+        } else {
+            self.id = try container.decodeIfPresent(String.self, forKey: .id) ?? UUID().uuidString
+        }
+        isHome = try container.decodeIfPresent(Bool.self, forKey: .isHome)
+        player = try container.decodeIfPresent(ShotPlayer.self, forKey: .player)
+        playerCoordinates = try container.decodeIfPresent(ShotCoordinates.self, forKey: .playerCoordinates)
+        goalMouthCoordinates = try container.decodeIfPresent(ShotCoordinates.self, forKey: .goalMouthCoordinates)
+        shotType = try container.decodeIfPresent(String.self, forKey: .shotType)
+        situation = try container.decodeIfPresent(String.self, forKey: .situation)
+        bodyPart = try container.decodeIfPresent(String.self, forKey: .bodyPart)
+        goalMouthLocation = try container.decodeIfPresent(String.self, forKey: .goalMouthLocation)
+        xg = container.decodeFlexibleDouble(forKey: .xg) ?? container.decodeFlexibleDouble(forKey: .xG)
+        xgot = container.decodeFlexibleDouble(forKey: .xgot) ?? container.decodeFlexibleDouble(forKey: .xGOT)
+        time = container.decodeFlexibleInt(forKey: .time)
+        addedTime = container.decodeFlexibleInt(forKey: .addedTime)
+    }
+}
+
+struct ShotPlayer: Decodable {
+    let name: String?
+    let shortName: String?
+
+    var bestName: String {
+        shortName ?? name ?? "Player"
+    }
+}
+
+struct ShotCoordinates: Decodable {
+    let x: Double?
+    let y: Double?
+    let z: Double?
+
+    enum CodingKeys: String, CodingKey {
+        case x
+        case y
+        case z
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        x = container.decodeFlexibleDouble(forKey: .x)
+        y = container.decodeFlexibleDouble(forKey: .y)
+        z = container.decodeFlexibleDouble(forKey: .z)
+    }
 }
 
 struct Boxscore: Decodable {

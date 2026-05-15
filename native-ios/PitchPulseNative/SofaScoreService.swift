@@ -43,6 +43,7 @@ struct SofaScoreService {
         let loadedLineups: SofaLineupsResponse? = await optionalFetch("/event/\(eventId)/lineups")
         let loadedNews: SofaEventNewsResponse? = await optionalFetch("/event/\(eventId)/media/news")
         let loadedOdds: SofaFeaturedOddsResponse? = await optionalFetch("/event/\(eventId)/odds/1/featured")
+        let loadedShotmap: SofaShotmapResponse? = await optionalFetch("/event/\(eventId)/shotmap")
 
         return MatchSummary(
             keyEvents: mapIncidents(loadedIncidents?.incidents ?? []),
@@ -50,7 +51,8 @@ struct SofaScoreService {
             boxscore: mapStatistics(loadedStatistics),
             news: NewsResponse(articles: loadedNews?.newsArticles?.map(mapEventNews) ?? []),
             odds: mapFeaturedOdds(loadedOdds),
-            rosters: mapLineups(loadedLineups, event: loadedEventDetail?.event)
+            rosters: mapLineups(loadedLineups, event: loadedEventDetail?.event),
+            shotmap: loadedShotmap?.shotmap
         )
     }
 
@@ -841,6 +843,10 @@ private struct SofaEventNewsArticle: Decodable {
     let thumbnailUrl: String?
     let externalUrl: String?
     let publishedAtTimestamp: Int64?
+}
+
+private struct SofaShotmapResponse: Decodable {
+    let shotmap: [ShotMapItem]?
 }
 
 private struct SofaNewsPost: Decodable {
