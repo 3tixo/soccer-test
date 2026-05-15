@@ -404,11 +404,11 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 10) {
             SectionTitle(kicker: "Table", title: "\(viewModel.selectedLeague.name) Standings")
 
-            if viewModel.filteredStandings.isEmpty && !viewModel.isLoading {
+            if viewModel.standings.isEmpty && !viewModel.isLoading {
                 StateCard(title: "No table available", detail: "SofaScore did not return standings for this competition.")
             } else {
                 LazyVStack(spacing: 0) {
-                    ForEach(Array(viewModel.filteredStandings.enumerated()), id: \.element.id) { index, entry in
+                    ForEach(Array(viewModel.standings.enumerated()), id: \.element.id) { index, entry in
                         Button {
                             selectedTeam = viewModel.teamContext(for: entry.team)
                         } label: {
@@ -428,11 +428,11 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 10) {
             SectionTitle(kicker: "Stories", title: "\(viewModel.selectedLeague.name) News")
 
-            if viewModel.filteredArticles.isEmpty && !viewModel.isLoading {
+            if viewModel.articles.isEmpty && !viewModel.isLoading {
                 StateCard(title: "No news available", detail: "SofaScore did not return matching media.")
             } else {
                 LazyVStack(spacing: 10) {
-                    ForEach(Array(viewModel.filteredArticles.prefix(12).enumerated()), id: \.offset) { _, article in
+                    ForEach(Array(viewModel.articles.prefix(12).enumerated()), id: \.offset) { _, article in
                         NewsCard(article: article)
                     }
                 }
@@ -600,15 +600,15 @@ struct ContentView: View {
     }
 
     private var visibleEvents: [ScoreEvent] {
-        viewModel.filteredEvents
+        viewModel.events
     }
 
     private var favoriteEvents: [ScoreEvent] {
-        viewModel.filteredEvents.filter { favoriteStore.eventContainsFavorite($0) }
+        viewModel.events.filter { favoriteStore.eventContainsFavorite($0) }
     }
 
     private var favoriteTeams: [StandingEntry] {
-        viewModel.filteredStandings.filter { favoriteStore.contains($0.team) }
+        viewModel.standings.filter { favoriteStore.contains($0.team) }
     }
 
     private var searchQuery: String {

@@ -13,9 +13,10 @@ struct SofaScoreService {
 
     func fetchScoreboard(leagueId: String, date: Date, useProviderDefaultDate: Bool) async throws -> ScoreboardResponse {
         let response: SofaEventsResponse = try await fetch("/unique-tournament/\(leagueId)/scheduled-events/\(Self.apiDate(date))")
+        let events = (response.events?.map(mapEvent) ?? []).filter { eventStarts($0, on: date) }
         return ScoreboardResponse(
             day: ScoreboardDay(date: Self.apiDate(date)),
-            events: response.events?.map(mapEvent) ?? []
+            events: events
         )
     }
 
@@ -431,6 +432,15 @@ struct SofaScoreService {
     private func isoString(from timestamp: Int64?) -> String? {
         guard let timestamp else { return nil }
         return ISO8601DateFormatter().string(from: Date(timeIntervalSince1970: TimeInterval(timestamp)))
+    }
+
+    private func eventStarts(_ event: ScoreEvent, on date: Date) -> Bool {
+        guard let value = event.date,
+              let eventDate = ISO8601DateFormatter().date(from: value)
+        else {
+            return true
+        }
+        return Self.apiDate(eventDate) == Self.apiDate(date)
     }
 }
 

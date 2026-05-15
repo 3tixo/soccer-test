@@ -1,3 +1,4 @@
+import ActivityKit
 import AppIntents
 import Foundation
 import SwiftUI
@@ -138,32 +139,73 @@ struct NativeWidgetProvider: AppIntentTimelineProvider {
     }
 
     private func fetchEntry(configuration: MatchWidgetIntent) async -> NativeWidgetEntry {
-        guard let url = URL(string: "https://api.sofascore.com/api/v1/unique-tournament/\(configuration.league.leagueId)/scheduled-events/\(apiDate(Date()))") else {
-            return fallback("SofaScore unavailable", configuration: configuration)
-        }
+        let hasTeamFilter = !configuration.teamFilter.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let offsets = widgetDateOffsets(for: configuration.display, hasTeamFilter: hasTeamFilter)
+        var events: [[String: Any]] = []
+        var seenIds = Set<String>()
 
-        do {
-            var request = URLRequest(url: url)
-            request.setValue("https://www.sofascore.com/", forHTTPHeaderField: "Referer")
-            request.setValue("https://www.sofascore.com", forHTTPHeaderField: "Origin")
-            request.setValue("application/json, text/plain, */*", forHTTPHeaderField: "Accept")
-            request.setValue("en-US,en;q=0.9", forHTTPHeaderField: "Accept-Language")
-            request.setValue("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1", forHTTPHeaderField: "User-Agent")
-
-            let (data, response) = try await URLSession.shared.data(for: request)
-            guard (response as? HTTPURLResponse)?.statusCode == 200,
-                  let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let events = json["events"] as? [[String: Any]],
-                  let event = bestEvent(events, configuration: configuration)
-            else {
-                return fallback("No matching match", configuration: configuration)
+        for offset in offsets {
+            let date = Calendar.current.date(byAdding: .day, value: offset, to: Date()) ?? Date()
+            let fetchedEvents = (try? await fetchEvents(leagueId: configuration.league.leagueId, date: date)) ?? []
+            for event in fetchedEvents {
+                let id = eventIdentifier(event)
+                guard !seenIds.contains(id) else { continue }
+                seenIds.insert(id)
+                events.append(event)
             }
-
-            return await entry(from: event, configuration: configuration)
-        } catch {
-            return fallback("SofaScore unavailable", configuration: configuration)
         }
+
+        guard let event = bestEvent(events, configuration: configuration) else {
+            return fallback("No matching match", configuration: configuration)
+        }
+
+        return await entry(from: event, configuration: configuration)
     }
+
+    private func fetchEvents(leagueId: String, date: Date) async throws -> [[String: Any]] {
+        guard let url = URL(string: "https://api.sofascore.com/api/v1/unique-tournament/\(leagueId)/scheduled-events/\(apiDate(date))") else {
+            return []
+        }
+
+        var request = URLRequest(url: url)
+        request.setValue("https://www.sofascore.com/", forHTTPHeaderField: "Referer")
+        request.setValue("https://www.sofascore.com", forHTTPHeaderField: "Origin")
+        request.setValue("application/json, text/plain, */*", forHTTPHeaderField: "Accept")
+        request.setValue("en-US,en;q=0.9", forHTTPHeaderField: "Accept-Language")
+        request.setValue("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1", forHTTPHeaderField: "User-Agent")
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard (response as? HTTPURLResponse)?.statusCode == 200,
+              let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else {
+            return []
+        }
+
+        return json["events"] as? [[String: Any]] ?? []
+    }
+}
+
+private func widgetDateOffsets(for display: WidgetDisplayOption, hasTeamFilter: Bool) -> [Int] {
+    switch display {
+    case .latestResult, .teamLatestResult:
+        return Array((-21...0).reversed())
+    case .liveOnly, .teamLiveOnly:
+        return [-1, 0, 1]
+    case .teamNextMatch:
+        return Array(0...28)
+    case .nextMatch:
+        return hasTeamFilter ? Array(0...28) : Array(0...7)
+    case .liveFirst:
+        return hasTeamFilter ? Array(-1...28) : Array(-1...7)
+    }
+}
+
+private func eventIdentifier(_ event: [String: Any]) -> String {
+    if let id = event["id"] as? Int { return String(id) }
+    if let id = event["id"] as? Int64 { return String(id) }
+    if let id = event["id"] as? Double { return String(Int(id)) }
+    if let id = event["id"] as? String { return id }
+    return "\(teamName(event["homeTeam"] as? [String: Any] ?? [:]))-\(teamName(event["awayTeam"] as? [String: Any] ?? [:]))-\(timestampValue(event["startTimestamp"]) ?? 0)"
 }
 
 private func bestEvent(_ events: [[String: Any]], configuration: MatchWidgetIntent) -> [String: Any]? {
@@ -204,8 +246,8 @@ private func teamFilteredEvents(_ events: [[String: Any]], query: String) -> [[S
     let needle = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     guard !needle.isEmpty else { return [] }
     return events.filter { event in
-        let home = teamName(event["homeTeam"] as? [String: Any] ?? [:]).lowercased()
-        let away = teamName(event["awayTeam"] as? [String: Any] ?? [:]).lowercased()
+        let home = teamSearchText(event["homeTeam"] as? [String: Any] ?? [:])
+        let away = teamSearchText(event["awayTeam"] as? [String: Any] ?? [:])
         return home.contains(needle) || away.contains(needle)
     }
 }
@@ -290,6 +332,18 @@ private func teamName(_ team: [String: Any]) -> String {
     return team["shortName"] as? String
         ?? team["name"] as? String
         ?? "TBA"
+}
+
+private func teamSearchText(_ team: [String: Any]) -> String {
+    [
+        team["shortName"] as? String,
+        team["name"] as? String,
+        team["slug"] as? String,
+        team["nameCode"] as? String
+    ]
+    .compactMap { $0 }
+    .joined(separator: " ")
+    .lowercased()
 }
 
 private func logoData(for team: [String: Any]) async -> Data? {
@@ -575,8 +629,7 @@ struct WidgetBackground: ViewModifier {
     }
 }
 
-@main
-struct PitchPulseNativeWidget: Widget {
+struct PitchPulseMatchWidget: Widget {
     var body: some WidgetConfiguration {
         AppIntentConfiguration(kind: "PitchPulseNativeWidget", intent: MatchWidgetIntent.self, provider: NativeWidgetProvider()) { entry in
             NativeWidgetView(entry: entry)
@@ -585,5 +638,123 @@ struct PitchPulseNativeWidget: Widget {
         .description("Choose a league and show live-first, next match, or latest result.")
         .supportedFamilies([.systemSmall, .systemMedium])
         .contentMarginsDisabled()
+    }
+}
+
+struct PitchPulseLiveActivityWidget: Widget {
+    var body: some WidgetConfiguration {
+        ActivityConfiguration(for: MatchLiveActivityAttributes.self) { context in
+            LiveActivityLockScreenView(context: context)
+        } dynamicIsland: { context in
+            DynamicIsland {
+                DynamicIslandExpandedRegion(.leading) {
+                    LiveActivityTeamName(context.attributes.homeName, score: context.state.homeScore)
+                }
+                DynamicIslandExpandedRegion(.trailing) {
+                    LiveActivityTeamName(context.attributes.awayName, score: context.state.awayScore)
+                }
+                DynamicIslandExpandedRegion(.bottom) {
+                    Text("\(context.attributes.leagueName) - \(context.state.detail)")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            } compactLeading: {
+                Text(context.state.homeScore)
+                    .font(.caption.weight(.black))
+            } compactTrailing: {
+                Text(context.state.awayScore)
+                    .font(.caption.weight(.black))
+            } minimal: {
+                Text(context.state.isLive ? "LIVE" : context.state.status)
+                    .font(.caption2.weight(.black))
+                    .foregroundStyle(context.state.isLive ? .red : .white)
+            }
+            .keylineTint(context.state.isLive ? .red : .white.opacity(0.35))
+        }
+    }
+}
+
+struct LiveActivityLockScreenView: View {
+    let context: ActivityViewContext<MatchLiveActivityAttributes>
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text(context.attributes.leagueName.uppercased())
+                    .font(.caption2.weight(.black))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                Spacer()
+                Text(context.state.status)
+                    .font(.caption.weight(.black))
+                    .foregroundStyle(context.state.isLive ? .white : .secondary)
+                    .padding(.horizontal, 10)
+                    .frame(height: 24)
+                    .background(context.state.isLive ? Color.red.opacity(0.90) : Color.white.opacity(0.10))
+                    .clipShape(Capsule())
+            }
+
+            LiveActivityScoreRow(name: context.attributes.homeName, score: context.state.homeScore)
+            LiveActivityScoreRow(name: context.attributes.awayName, score: context.state.awayScore)
+
+            Text(context.state.detail)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        }
+        .padding(16)
+        .activityBackgroundTint(Color(red: 0.02, green: 0.022, blue: 0.026))
+        .activitySystemActionForegroundColor(.white)
+    }
+}
+
+struct LiveActivityScoreRow: View {
+    let name: String
+    let score: String
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Text(name)
+                .font(.headline.weight(.black))
+                .foregroundStyle(.white)
+                .lineLimit(1)
+                .minimumScaleFactor(0.65)
+            Spacer(minLength: 8)
+            Text(score)
+                .font(.title2.weight(.black))
+                .foregroundStyle(.white)
+                .monospacedDigit()
+        }
+    }
+}
+
+struct LiveActivityTeamName: View {
+    let name: String
+    let score: String
+
+    init(_ name: String, score: String) {
+        self.name = name
+        self.score = score
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(name)
+                .font(.caption.weight(.bold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+            Text(score)
+                .font(.title3.weight(.black))
+                .monospacedDigit()
+        }
+    }
+}
+
+@main
+struct PitchPulseNativeWidgetBundle: WidgetBundle {
+    var body: some Widget {
+        PitchPulseMatchWidget()
+        PitchPulseLiveActivityWidget()
     }
 }

@@ -5,6 +5,7 @@ struct MatchDetailView: View {
     let event: ScoreEvent
     let league: League
 
+    @ObservedObject private var liveActivityManager = LiveActivityManager.shared
     @State private var summary: MatchSummary?
     @State private var isLoading = true
     @State private var errorMessage: String?
@@ -90,6 +91,28 @@ struct MatchDetailView: View {
             .font(.caption.weight(.semibold))
             .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, alignment: .leading)
+
+            if liveActivityManager.isSupported {
+                Button {
+                    Task {
+                        if liveActivityManager.isActive(event: event) {
+                            await liveActivityManager.end(event: event)
+                        } else {
+                            await liveActivityManager.start(event: event, league: league)
+                        }
+                    }
+                } label: {
+                    let isActive = liveActivityManager.isActive(event: event)
+                    Label(isActive ? "Stop Live Activity" : "Start Live Activity", systemImage: isActive ? "stop.circle.fill" : "bolt.circle.fill")
+                        .font(.caption.weight(.black))
+                        .foregroundStyle(isActive ? .white.opacity(0.78) : Color.pitchBackground)
+                        .padding(.horizontal, 12)
+                        .frame(height: 32)
+                        .background(isActive ? Color.white.opacity(0.10) : Color.pitchAccent)
+                        .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+            }
         }
         .padding(16)
         .frame(maxWidth: .infinity)
@@ -376,6 +399,7 @@ struct MatchDetailView: View {
             let loadedSummary = try await service.fetchSummary(leagueId: leagueId, eventId: eventId)
             guard !Task.isCancelled else { return }
             summary = loadedSummary
+            await liveActivityManager.update(event: event)
         } catch ProviderError.providerBlocked {
             guard !Task.isCancelled else { return }
             errorMessage = "SofaScore blocked this client request. This may need a backend proxy."
@@ -625,7 +649,7 @@ struct ShotMapBoard: View {
             let fieldPadding: CGFloat = 12
             let fieldWidth = max(1, pitchWidth - fieldPadding * 2)
             let fieldHeight = fieldWidth * 0.75
-            let goalAreaHeight: CGFloat = 102
+            let goalAreaHeight: CGFloat = 92
             let gap: CGFloat = 4
             let fieldTop = goalAreaHeight + gap + fieldPadding
             let fieldRect = CGRect(
@@ -685,7 +709,7 @@ struct ShotMapBoard: View {
                 }
             }
         }
-        .frame(height: 370)
+        .frame(height: 360)
     }
 
     private func point(for shot: ShotMapItem, in rect: CGRect) -> CGPoint {
@@ -701,7 +725,8 @@ struct ShotMapBoard: View {
 
     private func targetPoint(for shot: ShotMapItem, in rect: CGRect) -> CGPoint {
         let rawY = clamp(shot.goalMouthCoordinates?.y ?? shot.playerCoordinates?.y ?? 50)
-        return CGPoint(x: rect.minX + rect.width * CGFloat(rawY / 100), y: rect.minY)
+        let horizontal = 100 - rawY
+        return CGPoint(x: rect.minX + rect.width * CGFloat(horizontal / 100), y: rect.minY)
     }
 
     private func isGoal(_ shot: ShotMapItem) -> Bool {
@@ -847,7 +872,7 @@ struct ShotGoalTarget: View {
     var body: some View {
         Circle()
             .fill(isGoal ? Color.white : Color.white.opacity(0.72))
-            .frame(width: 16, height: 16)
+            .frame(width: 13, height: 13)
             .overlay(Circle().stroke(Color(red: 0.24, green: 0.78, blue: 0.32), lineWidth: 2))
             .shadow(color: Color(red: 0.24, green: 0.78, blue: 0.32).opacity(isGoal ? 0.45 : 0), radius: 5)
     }
@@ -861,8 +886,8 @@ struct ShotDot: View {
         ZStack {
             Circle()
                 .fill(fillColor)
-                .frame(width: selected ? 22 : 17, height: selected ? 22 : 17)
-                .overlay(Circle().stroke(borderColor, lineWidth: selected ? 3 : 1.6))
+                .frame(width: selected ? 19 : 15, height: selected ? 19 : 15)
+                .overlay(Circle().stroke(borderColor, lineWidth: selected ? 2.4 : 1.4))
                 .shadow(color: borderColor.opacity(selected ? 0.45 : 0), radius: 5)
 
             if isGoal || saved {
