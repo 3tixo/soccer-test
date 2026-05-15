@@ -15,7 +15,7 @@ struct LineupView: View {
     var body: some View {
         VStack(spacing: 12) {
             if orderedGroups.isEmpty {
-                StateCard(title: "No lineups", detail: "ESPN has not published lineups for this match.")
+                StateCard(title: "No lineups", detail: "SofaScore has not published lineups for this match.")
             } else {
                 ZStack {
                     PitchMarkings()

@@ -29,7 +29,7 @@ struct ContentView: View {
                 .scrollIndicators(.hidden)
 
                 if viewModel.isLoading && viewModel.events.isEmpty && viewModel.standings.isEmpty {
-                    LoadingOverlay(text: "Loading ESPN data")
+                    LoadingOverlay(text: "Loading SofaScore data")
                         .transition(.opacity)
                 }
             }
@@ -271,9 +271,9 @@ struct ContentView: View {
             SectionTitle(kicker: "Fixtures", title: "\(viewModel.selectedLeague.name) Matches")
 
             if let errorMessage = viewModel.errorMessage, viewModel.events.isEmpty {
-                StateCard(title: "ESPN error", detail: errorMessage)
+                StateCard(title: "SofaScore error", detail: errorMessage)
             } else if visibleEvents.isEmpty && !viewModel.isLoading {
-                StateCard(title: "No matches", detail: "ESPN did not return matching fixtures.")
+                StateCard(title: "No matches", detail: "SofaScore did not return matching fixtures.")
             } else {
                 LazyVStack(spacing: 10) {
                     ForEach(visibleEvents) { event in
@@ -294,7 +294,7 @@ struct ContentView: View {
             SectionTitle(kicker: "Table", title: "\(viewModel.selectedLeague.name) Standings")
 
             if viewModel.filteredStandings.isEmpty && !viewModel.isLoading {
-                StateCard(title: "No table available", detail: "ESPN does not expose standings for every competition.")
+                StateCard(title: "No table available", detail: "SofaScore did not return standings for this competition.")
             } else {
                 LazyVStack(spacing: 0) {
                     ForEach(Array(viewModel.filteredStandings.enumerated()), id: \.element.id) { index, entry in
@@ -318,7 +318,7 @@ struct ContentView: View {
             SectionTitle(kicker: "Stories", title: "\(viewModel.selectedLeague.name) News")
 
             if viewModel.filteredArticles.isEmpty && !viewModel.isLoading {
-                StateCard(title: "No news available", detail: "ESPN did not return matching articles.")
+                StateCard(title: "No news available", detail: "SofaScore did not return matching media.")
             } else {
                 LazyVStack(spacing: 10) {
                     ForEach(viewModel.filteredArticles.prefix(12)) { article in
@@ -571,7 +571,7 @@ struct NewsCard: View {
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             }
 
-            Text(article.headline ?? "ESPN story")
+            Text(article.headline ?? "SofaScore story")
                 .font(.headline.weight(.black))
                 .foregroundStyle(.white)
                 .lineLimit(2)

@@ -9,7 +9,7 @@ struct MatchDetailView: View {
     @State private var errorMessage: String?
     @State private var activeTab: MatchDetailTab = .summary
 
-    private let service = ESPNService()
+    private let service = SofaScoreService()
 
     var body: some View {
         ZStack {
@@ -109,7 +109,7 @@ struct MatchDetailView: View {
         DetailBlock(title: "Timeline") {
             let events = timelineEvents
             if events.isEmpty {
-                StateCard(title: "No timeline yet", detail: "ESPN has not published match events for this fixture.")
+                StateCard(title: "No timeline yet", detail: "SofaScore has not published match events for this fixture.")
             } else {
                 VStack(spacing: 0) {
                     ForEach(events, id: \.stableId) { item in
@@ -164,7 +164,7 @@ struct MatchDetailView: View {
             if let odds, odds.hasDisplayableMoneyline {
                 OddsBoard(odds: odds, event: event)
             } else {
-                StateCard(title: "No odds", detail: "ESPN did not return odds for this match.")
+                StateCard(title: "No odds", detail: "SofaScore did not return odds for this match.")
             }
         }
     }
@@ -173,7 +173,7 @@ struct MatchDetailView: View {
         DetailBlock(title: "Match stats") {
             let rows = matchStatRows
             if rows.isEmpty {
-                StateCard(title: "No stats yet", detail: "Stats appear when ESPN publishes official match data.")
+                StateCard(title: "No stats yet", detail: "Stats appear when SofaScore publishes official match data.")
             } else {
                 VStack(spacing: 12) {
                     ForEach(rows) { row in
@@ -246,13 +246,17 @@ struct MatchDetailView: View {
         let homeStats = statMap(teams[0].statistics)
         let awayStats = statMap(teams[1].statistics)
         let definitions = [
-            ("Possession", "possessionPct", "%"),
-            ("Shots", "totalShots", ""),
-            ("On target", "shotsOnTarget", ""),
-            ("Corners", "wonCorners", ""),
-            ("Fouls", "foulsCommitted", ""),
+            ("Expected goals", "expectedGoals", ""),
+            ("Possession", "ballPossession", ""),
+            ("Shots", "totalShotsOnGoal", ""),
+            ("On target", "shotsOnGoal", ""),
+            ("Big chances", "bigChanceCreated", ""),
+            ("Corners", "cornerKicks", ""),
+            ("Fouls", "fouls", ""),
             ("Yellow cards", "yellowCards", ""),
-            ("Red cards", "redCards", "")
+            ("Red cards", "redCards", ""),
+            ("Passes", "passes", ""),
+            ("Tackles", "totalTackle", "")
         ]
 
         return definitions.compactMap { label, name, suffix in
@@ -287,8 +291,10 @@ struct MatchDetailView: View {
 
         do {
             summary = try await service.fetchSummary(leagueId: league.id, eventId: event.id)
+        } catch ProviderError.providerBlocked {
+            errorMessage = "SofaScore blocked this client request. This may need a backend proxy."
         } catch {
-            errorMessage = "ESPN did not return summary data for this match."
+            errorMessage = "SofaScore did not return summary data for this match."
         }
 
         isLoading = false

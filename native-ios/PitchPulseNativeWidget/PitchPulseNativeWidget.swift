@@ -23,12 +23,12 @@ enum WidgetLeagueOption: String, AppEnum {
 
     var leagueId: String {
         switch self {
-        case .premierLeague: return "eng.1"
-        case .laLiga: return "esp.1"
-        case .serieA: return "ita.1"
-        case .bundesliga: return "ger.1"
-        case .ligue1: return "fra.1"
-        case .championsLeague: return "uefa.champions"
+        case .premierLeague: return "17"
+        case .laLiga: return "8"
+        case .serieA: return "23"
+        case .bundesliga: return "35"
+        case .ligue1: return "34"
+        case .championsLeague: return "7"
         }
     }
 
@@ -112,12 +112,19 @@ struct NativeWidgetProvider: AppIntentTimelineProvider {
     }
 
     private func fetchEntry(configuration: MatchWidgetIntent) async -> NativeWidgetEntry {
-        guard let url = URL(string: "https://site.api.espn.com/apis/site/v2/sports/soccer/\(configuration.league.leagueId)/scoreboard") else {
-            return fallback("ESPN unavailable", configuration: configuration)
+        guard let url = URL(string: "https://api.sofascore.com/api/v1/unique-tournament/\(configuration.league.leagueId)/scheduled-events/\(apiDate(Date()))") else {
+            return fallback("SofaScore unavailable", configuration: configuration)
         }
 
         do {
-            let (data, response) = try await URLSession.shared.data(from: url)
+            var request = URLRequest(url: url)
+            request.setValue("https://www.sofascore.com/", forHTTPHeaderField: "Referer")
+            request.setValue("https://www.sofascore.com", forHTTPHeaderField: "Origin")
+            request.setValue("application/json, text/plain, */*", forHTTPHeaderField: "Accept")
+            request.setValue("en-US,en;q=0.9", forHTTPHeaderField: "Accept-Language")
+            request.setValue("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1", forHTTPHeaderField: "User-Agent")
+
+            let (data, response) = try await URLSession.shared.data(for: request)
             guard (response as? HTTPURLResponse)?.statusCode == 200,
                   let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let events = json["events"] as? [[String: Any]],
@@ -128,7 +135,7 @@ struct NativeWidgetProvider: AppIntentTimelineProvider {
 
             return entry(from: event, configuration: configuration)
         } catch {
-            return fallback("ESPN unavailable", configuration: configuration)
+            return fallback("SofaScore unavailable", configuration: configuration)
         }
     }
 }
@@ -152,13 +159,11 @@ private func bestEvent(_ events: [[String: Any]], mode: WidgetDisplayOption) -> 
 }
 
 private func entry(from event: [String: Any], configuration: MatchWidgetIntent) -> NativeWidgetEntry {
-    let competition = (event["competitions"] as? [[String: Any]])?.first
-    let competitors = competition?["competitors"] as? [[String: Any]] ?? []
-    let home = competitors.first { $0["homeAway"] as? String == "home" } ?? competitors.first ?? [:]
-    let away = competitors.first { $0["homeAway"] as? String == "away" } ?? competitors.dropFirst().first ?? [:]
+    let home = event["homeTeam"] as? [String: Any] ?? [:]
+    let away = event["awayTeam"] as? [String: Any] ?? [:]
     let isPre = state(event) == "pre"
     let live = state(event) == "in"
-    let score = isPre ? kickoffTime(event["date"] as? String) : "\(scoreText(home))-\(scoreText(away))"
+    let score = isPre ? kickoffTime(timestampValue(event["startTimestamp"])) : "\(scoreText(event["homeScore"] as? [String: Any]))-\(scoreText(event["awayScore"] as? [String: Any]))"
 
     return NativeWidgetEntry(
         date: Date(),
@@ -187,51 +192,64 @@ private func fallback(_ status: String, configuration: MatchWidgetIntent) -> Nat
 
 private func state(_ event: [String: Any]) -> String {
     let status = event["status"] as? [String: Any]
-    let type = status?["type"] as? [String: Any]
-    return type?["state"] as? String ?? ""
+    let type = status?["type"] as? String ?? ""
+    if type == "inprogress" { return "in" }
+    if type == "finished" { return "post" }
+    return "pre"
 }
 
 private func statusText(_ event: [String: Any]) -> String {
     let status = event["status"] as? [String: Any]
-    let type = status?["type"] as? [String: Any]
-    return type?["shortDetail"] as? String ?? type?["description"] as? String ?? "Scheduled"
+    let type = status?["type"] as? String ?? ""
+    if type == "finished" { return "FT" }
+    return status?["description"] as? String ?? "Scheduled"
 }
 
 private func liveClock(_ event: [String: Any]) -> String {
     let status = event["status"] as? [String: Any]
-    return status?["displayClock"] as? String ?? statusText(event)
+    return status?["description"] as? String ?? statusText(event)
 }
 
-private func teamName(_ competitor: [String: Any]) -> String {
-    let team = competitor["team"] as? [String: Any]
-    return team?["shortDisplayName"] as? String
-        ?? team?["displayName"] as? String
-        ?? team?["name"] as? String
+private func teamName(_ team: [String: Any]) -> String {
+    return team["shortName"] as? String
+        ?? team["name"] as? String
         ?? "TBA"
 }
 
-private func scoreText(_ competitor: [String: Any]) -> String {
-    if let score = competitor["score"] as? String {
-        return score
-    }
-    if let score = competitor["score"] as? [String: Any] {
-        return score["displayValue"] as? String
-            ?? (score["value"] as? Double).map { String(Int($0)) }
-            ?? "-"
-    }
-    return "-"
+private func scoreText(_ score: [String: Any]?) -> String {
+    score?["display"] as? String
+        ?? (score?["display"] as? Int).map(String.init)
+        ?? (score?["current"] as? Int).map(String.init)
+        ?? "-"
 }
 
-private func kickoffTime(_ isoDate: String?) -> String {
-    guard let isoDate, let date = ISO8601DateFormatter().date(from: isoDate) else { return "TBA" }
+private func kickoffTime(_ timestamp: Int64?) -> String {
+    guard let timestamp else { return "TBA" }
+    let date = Date(timeIntervalSince1970: TimeInterval(timestamp))
     return date.formatted(date: .omitted, time: .shortened)
 }
 
 private func eventDate(_ event: [String: Any]) -> Date {
-    guard let value = event["date"] as? String, let date = ISO8601DateFormatter().date(from: value) else {
+    guard let value = timestampValue(event["startTimestamp"]) else {
         return .distantPast
     }
-    return date
+    return Date(timeIntervalSince1970: TimeInterval(value))
+}
+
+private func timestampValue(_ value: Any?) -> Int64? {
+    if let value = value as? Int64 { return value }
+    if let value = value as? Int { return Int64(value) }
+    if let value = value as? Double { return Int64(value) }
+    if let value = value as? String { return Int64(value) }
+    return nil
+}
+
+private func apiDate(_ date: Date) -> String {
+    let formatter = DateFormatter()
+    formatter.calendar = Calendar(identifier: .gregorian)
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.dateFormat = "yyyy-MM-dd"
+    return formatter.string(from: date)
 }
 
 private func oldestEventFirst(_ first: [String: Any], _ second: [String: Any]) -> Bool {

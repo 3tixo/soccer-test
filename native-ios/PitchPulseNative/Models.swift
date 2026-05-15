@@ -7,14 +7,14 @@ struct League: Identifiable, Hashable {
 }
 
 let nativeLeagues: [League] = [
-    League(id: "eng.1", name: "Premier League", country: "England"),
-    League(id: "esp.1", name: "LALIGA", country: "Spain"),
-    League(id: "ita.1", name: "Serie A", country: "Italy"),
-    League(id: "ger.1", name: "Bundesliga", country: "Germany"),
-    League(id: "fra.1", name: "Ligue 1", country: "France"),
-    League(id: "uefa.champions", name: "Champions League", country: "Europe"),
-    League(id: "uefa.europa", name: "Europa League", country: "Europe"),
-    League(id: "usa.1", name: "MLS", country: "United States")
+    League(id: "17", name: "Premier League", country: "England"),
+    League(id: "8", name: "LALIGA", country: "Spain"),
+    League(id: "23", name: "Serie A", country: "Italy"),
+    League(id: "35", name: "Bundesliga", country: "Germany"),
+    League(id: "34", name: "Ligue 1", country: "France"),
+    League(id: "7", name: "Champions League", country: "Europe"),
+    League(id: "679", name: "Europa League", country: "Europe"),
+    League(id: "242", name: "MLS", country: "United States")
 ]
 
 enum AppTab: String, CaseIterable, Identifiable {
@@ -101,6 +101,15 @@ struct Competitor: Decodable, Identifiable {
         records = (try? container.decodeIfPresent([TeamRecord].self, forKey: .records))
             ?? (try? container.decodeIfPresent([TeamRecord].self, forKey: .record))
     }
+
+    init(id: String?, homeAway: String?, score: String?, winner: Bool?, team: Team?, records: [TeamRecord]?) {
+        self.id = id
+        self.homeAway = homeAway
+        self.score = score
+        self.winner = winner
+        self.team = team
+        self.records = records
+    }
 }
 
 struct Team: Decodable {
@@ -143,6 +152,32 @@ struct Team: Decodable {
         alternateColor = try container.decodeIfPresent(String.self, forKey: .alternateColor)
         recordSummary = try container.decodeIfPresent(String.self, forKey: .recordSummary)
         standingSummary = try container.decodeIfPresent(String.self, forKey: .standingSummary)
+    }
+
+    init(
+        id: String?,
+        displayName: String?,
+        shortDisplayName: String?,
+        name: String?,
+        abbreviation: String?,
+        logo: String?,
+        logos: [TeamLogo]?,
+        color: String?,
+        alternateColor: String?,
+        recordSummary: String?,
+        standingSummary: String?
+    ) {
+        self.id = id
+        self.displayName = displayName
+        self.shortDisplayName = shortDisplayName
+        self.name = name
+        self.abbreviation = abbreviation
+        self.logo = logo
+        self.logos = logos
+        self.color = color
+        self.alternateColor = alternateColor
+        self.recordSummary = recordSummary
+        self.standingSummary = standingSummary
     }
 
     var bestName: String {
@@ -217,6 +252,14 @@ struct StandingStat: Decodable {
         displayValue = try container.decodeIfPresent(String.self, forKey: .displayValue)
         summary = try container.decodeIfPresent(String.self, forKey: .summary)
         value = container.decodeFlexibleDouble(forKey: .value)
+    }
+
+    init(name: String?, displayName: String?, displayValue: String?, summary: String?, value: Double?) {
+        self.name = name
+        self.displayName = displayName
+        self.displayValue = displayValue
+        self.summary = summary
+        self.value = value
     }
 }
 
@@ -325,6 +368,14 @@ struct GameStatistic: Decodable {
         shortDisplayName = try container.decodeIfPresent(String.self, forKey: .shortDisplayName)
         displayValue = try container.decodeIfPresent(String.self, forKey: .displayValue)
         value = container.decodeFlexibleDouble(forKey: .value)
+    }
+
+    init(name: String?, displayName: String?, shortDisplayName: String?, displayValue: String?, value: Double?) {
+        self.name = name
+        self.displayName = displayName
+        self.shortDisplayName = shortDisplayName
+        self.displayValue = displayValue
+        self.value = value
     }
 }
 
@@ -450,6 +501,26 @@ struct RosterPlayer: Decodable, Identifiable {
         subbedIn = try container.decodeIfPresent(Bool.self, forKey: .subbedIn)
         subbedOut = try container.decodeIfPresent(Bool.self, forKey: .subbedOut)
         stats = try container.decodeIfPresent([GameStatistic].self, forKey: .stats)
+    }
+
+    init(
+        athlete: Athlete?,
+        jersey: String?,
+        starter: Bool?,
+        position: PlayerPosition?,
+        formationPlace: Int?,
+        subbedIn: Bool?,
+        subbedOut: Bool?,
+        stats: [GameStatistic]?
+    ) {
+        self.athlete = athlete
+        self.jersey = jersey
+        self.starter = starter
+        self.position = position
+        self.formationPlace = formationPlace
+        self.subbedIn = subbedIn
+        self.subbedOut = subbedOut
+        self.stats = stats
     }
 }
 

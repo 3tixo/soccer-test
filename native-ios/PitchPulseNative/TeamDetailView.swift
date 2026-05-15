@@ -10,7 +10,7 @@ struct TeamDetailView: View {
     @State private var teamArticles: [NewsArticle] = []
     @State private var isLoadingDetails = true
 
-    private let service = ESPNService()
+    private let service = SofaScoreService()
 
     private var standingStats: [String: StandingStat] {
         Dictionary(uniqueKeysWithValues: (context.standing?.stats ?? []).compactMap { stat in
@@ -117,7 +117,7 @@ struct TeamDetailView: View {
                 .map { result(for: $0) }
 
             if form.isEmpty {
-                StateCard(title: "No form", detail: "ESPN did not return completed fixtures for this club yet.")
+                StateCard(title: "No form", detail: "SofaScore did not return completed fixtures for this club yet.")
             } else {
                 HStack(spacing: 8) {
                     ForEach(Array(form.enumerated()), id: \.offset) { _, result in
@@ -136,7 +136,7 @@ struct TeamDetailView: View {
     private var scheduleBlock: some View {
         DetailBlock(title: "Schedule") {
             if scheduleDisplayEvents.isEmpty {
-                StateCard(title: "No matches", detail: "ESPN did not return a team schedule.")
+                StateCard(title: "No matches", detail: "SofaScore did not return a team schedule.")
             } else {
                 VStack(spacing: 8) {
                     ForEach(scheduleDisplayEvents.prefix(8)) { event in
@@ -150,7 +150,7 @@ struct TeamDetailView: View {
     private var newsBlock: some View {
         DetailBlock(title: "Team news") {
             if loadedArticles.isEmpty {
-                StateCard(title: "No team news", detail: "No loaded ESPN articles matched this club.")
+                StateCard(title: "No team media", detail: "No loaded SofaScore media matched this club.")
             } else {
                 VStack(spacing: 10) {
                     ForEach(loadedArticles.prefix(4)) { article in

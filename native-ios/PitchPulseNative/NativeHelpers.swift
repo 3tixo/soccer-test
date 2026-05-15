@@ -136,9 +136,11 @@ struct FormationRow: Identifiable {
 
 func formationRows(for players: [RosterPlayer], formation: String?) -> [FormationRow] {
     let starters = players.filter { $0.starter == true }
-    let positionRows = formationRowsFromPositions(starters)
-    if positionRows.count >= 3 {
-        return positionRows
+    if !usesBroadProviderPositions(starters) {
+        let positionRows = formationRowsFromPositions(starters)
+        if positionRows.count >= 3 {
+            return positionRows
+        }
     }
 
     let ordered = starters.sorted {
@@ -180,6 +182,15 @@ private func formationCounts(formation: String?, starterCount: Int) -> [Int] {
         return [1, 4, 3, 3]
     }
     return [1, max(starterCount - 1, 0)].filter { $0 > 0 }
+}
+
+private func usesBroadProviderPositions(_ players: [RosterPlayer]) -> Bool {
+    let broad = Set(["G", "D", "M", "F", "GK", "CB", "CM", "ST"])
+    let labels = players.compactMap { player -> String? in
+        let raw = player.position?.abbreviation ?? player.position?.displayName
+        return raw?.uppercased()
+    }
+    return !labels.isEmpty && labels.allSatisfy { broad.contains($0) }
 }
 
 private func formationLineName(index: Int, total: Int) -> String {
