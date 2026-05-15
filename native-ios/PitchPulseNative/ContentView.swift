@@ -5,54 +5,176 @@ struct ContentView: View {
     @StateObject private var viewModel = ScoreboardViewModel()
     @StateObject private var alertManager = MatchAlertManager()
     @StateObject private var favoriteStore = FavoriteStore()
+    @State private var rootTab: RootTab = .matches
     @State private var selectedMatch: SelectedMatch?
     @State private var selectedTeam: TeamDetailContext?
-    @State private var favoritesOnly = false
 
     var body: some View {
-        NavigationStack {
-            ZStack {
-                AppBackground()
+        TabView(selection: $rootTab) {
+            NavigationStack {
+                matchesRoot
+            }
+            .tabItem { Label("Matches", systemImage: "sportscourt.fill") }
+            .tag(RootTab.matches)
 
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 16) {
-                        header
-                        searchField
-                        leagueStrip
-                        dateControls
-                        hero
-                        tabPicker
-                        activeSection
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 24)
-                }
-                .scrollIndicators(.hidden)
+            NavigationStack {
+                favoritesRoot
+            }
+            .tabItem { Label("Favorites", systemImage: "star.fill") }
+            .tag(RootTab.favorites)
 
-                if viewModel.isLoading && viewModel.events.isEmpty && viewModel.standings.isEmpty {
-                    LoadingOverlay(text: "Loading SofaScore data")
-                        .transition(.opacity)
-                }
+            NavigationStack {
+                leaguesRoot
             }
-            .task {
-                await viewModel.load()
-                alertManager.refresh(events: viewModel.events, league: viewModel.selectedLeague, favoriteStore: favoriteStore)
+            .tabItem { Label("Leagues", systemImage: "list.bullet.rectangle") }
+            .tag(RootTab.leagues)
+
+            NavigationStack {
+                searchRoot
             }
-            .refreshable {
-                await viewModel.load()
-                alertManager.refresh(events: viewModel.events, league: viewModel.selectedLeague, favoriteStore: favoriteStore)
+            .tabItem { Label("Search", systemImage: "magnifyingglass") }
+            .tag(RootTab.search)
+
+            NavigationStack {
+                settingsRoot
             }
-            .sheet(item: $selectedMatch) { selection in
-                MatchDetailView(event: selection.event, league: selection.league)
-                    .presentationDetents([.large])
-                    .presentationDragIndicator(.visible)
-            }
-            .sheet(item: $selectedTeam) { context in
-                TeamDetailView(context: context, league: viewModel.selectedLeague, favoriteStore: favoriteStore)
-                    .presentationDetents([.large])
-                    .presentationDragIndicator(.visible)
+            .tabItem { Label("Settings", systemImage: "gearshape.fill") }
+            .tag(RootTab.settings)
+        }
+        .tint(Color.pitchAccent)
+        .preferredColorScheme(.dark)
+        .task {
+            await reloadCurrentData()
+        }
+        .sheet(item: $selectedMatch) { selection in
+            MatchDetailView(event: selection.event, league: selection.league)
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+        }
+        .sheet(item: $selectedTeam) { context in
+            TeamDetailView(context: context, league: viewModel.selectedLeague, favoriteStore: favoriteStore)
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+        }
+    }
+
+    private var matchesRoot: some View {
+        screen {
+            header
+            leagueStrip
+            dateControls
+            hero
+            tabPicker
+            activeSection
+        }
+    }
+
+    private var favoritesRoot: some View {
+        screen {
+            SectionTitle(kicker: "Pinned", title: "Favorites")
+
+            if !favoriteStore.hasFavorites {
+                StateCard(title: "No favorite teams yet", detail: "Open a club page from the table and tap the star to pin it here.")
+            } else {
+                favoriteMatchesSection
+                favoriteTeamsSection
             }
         }
+    }
+
+    private var leaguesRoot: some View {
+        screen {
+            SectionTitle(kicker: "Competitions", title: "Leagues")
+
+            LazyVStack(spacing: 10) {
+                ForEach(nativeLeagues) { league in
+                    Button {
+                        Task {
+                            await viewModel.select(league)
+                            alertManager.refresh(events: viewModel.events, league: viewModel.selectedLeague, favoriteStore: favoriteStore)
+                            rootTab = .matches
+                        }
+                    } label: {
+                        HStack(spacing: 12) {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(league.name)
+                                    .font(.headline.weight(.black))
+                                    .foregroundStyle(.white)
+                                Text(league.country.uppercased())
+                                    .font(.caption2.weight(.black))
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            if viewModel.selectedLeague == league {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundStyle(Color.pitchAccent)
+                            }
+                        }
+                        .padding(14)
+                        .background(Color.pitchSurface)
+                        .overlay(cardStroke(10))
+                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    private var searchRoot: some View {
+        screen {
+            SectionTitle(kicker: "Find", title: "Search")
+            searchField
+            searchResultsSection
+        }
+    }
+
+    private var settingsRoot: some View {
+        screen {
+            SectionTitle(kicker: "App", title: "Settings")
+
+            settingsActionCard(
+                title: "Match notifications",
+                detail: alertManager.isEnabled ? "Live and final alerts are enabled for favorite teams." : "Enable alerts for favorite team live and final updates.",
+                icon: alertManager.isEnabled ? "bell.fill" : "bell"
+            ) {
+                Task {
+                    await alertManager.toggle(events: viewModel.events, league: viewModel.selectedLeague, favoriteStore: favoriteStore)
+                }
+            }
+
+            settingsInfoCard(title: "Selected league", value: viewModel.selectedLeague.name, detail: viewModel.selectedLeague.country)
+            settingsInfoCard(title: "Favorite teams", value: "\(favoriteStore.teamIds.count)", detail: "Teams pinned on this device")
+            settingsInfoCard(title: "Data source", value: "SofaScore", detail: "Private API endpoints can occasionally block direct clients.")
+        }
+    }
+
+    private func screen<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        ZStack {
+            AppBackground()
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    content()
+                }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 24)
+            }
+            .scrollIndicators(.hidden)
+            .refreshable {
+                await reloadCurrentData()
+            }
+
+            if viewModel.isLoading && viewModel.events.isEmpty && viewModel.standings.isEmpty {
+                LoadingOverlay(text: "Loading SofaScore data")
+                    .transition(.opacity)
+            }
+        }
+    }
+
+    private func reloadCurrentData() async {
+        await viewModel.load()
+        alertManager.refresh(events: viewModel.events, league: viewModel.selectedLeague, favoriteStore: favoriteStore)
     }
 
     private var header: some View {
@@ -64,18 +186,6 @@ struct ContentView: View {
             }
 
             Spacer()
-
-            Button {
-                favoritesOnly.toggle()
-            } label: {
-                Image(systemName: favoritesOnly ? "star.fill" : "star")
-                    .font(.headline.weight(.black))
-                    .foregroundStyle(favoritesOnly ? Color.pitchBackground : .white)
-                    .frame(width: 44, height: 44)
-                    .background(favoritesOnly ? Color.pitchAccent : Color.pitchSurface)
-                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-            }
-            .buttonStyle(.plain)
 
             Button {
                 Task {
@@ -330,6 +440,157 @@ struct ContentView: View {
         }
     }
 
+    private var favoriteMatchesSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            SectionTitle(kicker: "Matches", title: "Favorite Team Matches")
+
+            if favoriteEvents.isEmpty && !viewModel.isLoading {
+                StateCard(title: "No favorite matches today", detail: "Try another date or add more teams from league tables.")
+            } else {
+                LazyVStack(spacing: 10) {
+                    ForEach(Array(favoriteEvents.enumerated()), id: \.offset) { _, event in
+                        Button {
+                            selectedMatch = SelectedMatch(event: event, league: viewModel.selectedLeague)
+                        } label: {
+                            MatchCard(event: event, favoriteStore: favoriteStore)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
+    }
+
+    private var favoriteTeamsSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            SectionTitle(kicker: "Clubs", title: "Favorite Teams")
+
+            if favoriteTeams.isEmpty && !viewModel.isLoading {
+                StateCard(title: "Favorite clubs not in this table", detail: "Switch leagues to see pinned clubs that belong to another competition.")
+            } else {
+                LazyVStack(spacing: 0) {
+                    ForEach(Array(favoriteTeams.enumerated()), id: \.element.id) { index, entry in
+                        Button {
+                            selectedTeam = viewModel.teamContext(for: entry.team)
+                        } label: {
+                            StandingRow(entry: entry, fallbackRank: index + 1, isFavorite: true)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .background(Color.pitchSurface)
+                .overlay(cardStroke(10))
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            }
+        }
+    }
+
+    private var searchResultsSection: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            if searchQuery.isEmpty {
+                StateCard(title: "Search teams and matches", detail: "Type a club, matchup, league story, or abbreviation.")
+            } else {
+                if !viewModel.filteredEvents.isEmpty {
+                    VStack(alignment: .leading, spacing: 10) {
+                        SectionTitle(kicker: "Matches", title: "Match Results")
+                        ForEach(Array(viewModel.filteredEvents.prefix(8).enumerated()), id: \.offset) { _, event in
+                            Button {
+                                selectedMatch = SelectedMatch(event: event, league: viewModel.selectedLeague)
+                            } label: {
+                                MatchCard(event: event, favoriteStore: favoriteStore)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+
+                if !viewModel.filteredStandings.isEmpty {
+                    VStack(alignment: .leading, spacing: 10) {
+                        SectionTitle(kicker: "Teams", title: "Team Results")
+                        LazyVStack(spacing: 0) {
+                            ForEach(Array(viewModel.filteredStandings.prefix(10).enumerated()), id: \.element.id) { index, entry in
+                                Button {
+                                    selectedTeam = viewModel.teamContext(for: entry.team)
+                                } label: {
+                                    StandingRow(entry: entry, fallbackRank: index + 1, isFavorite: favoriteStore.contains(entry.team))
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .background(Color.pitchSurface)
+                        .overlay(cardStroke(10))
+                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    }
+                }
+
+                if !viewModel.filteredArticles.isEmpty {
+                    VStack(alignment: .leading, spacing: 10) {
+                        SectionTitle(kicker: "News", title: "Story Results")
+                        ForEach(Array(viewModel.filteredArticles.prefix(6).enumerated()), id: \.offset) { _, article in
+                            NewsCard(article: article)
+                        }
+                    }
+                }
+
+                if viewModel.filteredEvents.isEmpty && viewModel.filteredStandings.isEmpty && viewModel.filteredArticles.isEmpty && !viewModel.isLoading {
+                    StateCard(title: "No results", detail: "No teams, matches, or stories matched this search.")
+                }
+            }
+        }
+    }
+
+    private func settingsActionCard(title: String, detail: String, icon: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                Image(systemName: icon)
+                    .font(.headline.weight(.black))
+                    .foregroundStyle(Color.pitchBackground)
+                    .frame(width: 42, height: 42)
+                    .background(Color.pitchAccent)
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                        .font(.headline.weight(.black))
+                        .foregroundStyle(.white)
+                    Text(detail)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+
+                Spacer()
+            }
+            .padding(14)
+            .background(Color.pitchSurface)
+            .overlay(cardStroke(10))
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func settingsInfoCard(title: String, value: String, detail: String) -> some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title.uppercased())
+                    .font(.caption2.weight(.black))
+                    .foregroundStyle(.secondary)
+                Text(value)
+                    .font(.headline.weight(.black))
+                    .foregroundStyle(.white)
+                Text(detail)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+        }
+        .padding(14)
+        .background(Color.pitchSurface)
+        .overlay(cardStroke(10))
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
     private func icon(for tab: AppTab) -> String {
         switch tab {
         case .matches: return "rectangle.grid.1x2"
@@ -339,9 +600,30 @@ struct ContentView: View {
     }
 
     private var visibleEvents: [ScoreEvent] {
-        guard favoritesOnly else { return viewModel.filteredEvents }
-        return viewModel.filteredEvents.filter { favoriteStore.eventContainsFavorite($0) }
+        viewModel.filteredEvents
     }
+
+    private var favoriteEvents: [ScoreEvent] {
+        viewModel.filteredEvents.filter { favoriteStore.eventContainsFavorite($0) }
+    }
+
+    private var favoriteTeams: [StandingEntry] {
+        viewModel.filteredStandings.filter { favoriteStore.contains($0.team) }
+    }
+
+    private var searchQuery: String {
+        viewModel.searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+}
+
+private enum RootTab: String, CaseIterable, Identifiable {
+    case matches
+    case favorites
+    case leagues
+    case search
+    case settings
+
+    var id: String { rawValue }
 }
 
 struct SelectedMatch: Identifiable {

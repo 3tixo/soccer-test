@@ -740,8 +740,11 @@ struct ShotPitchLines: Shape {
         path.addRect(CGRect(x: x(36.43), y: y(0), width: rect.width * 0.2714, height: rect.height * 0.1143))
         path.move(to: CGPoint(x: x(39.41), y: y(32.2)))
         path.addQuadCurve(to: CGPoint(x: x(60.59), y: y(32.2)), control: CGPoint(x: x(50), y: y(43.2)))
+        path.move(to: CGPoint(x: x(36.89), y: y(100)))
         path.addArc(center: CGPoint(x: x(50), y: y(100)), radius: rect.width * 0.13, startAngle: .degrees(180), endAngle: .degrees(0), clockwise: false)
+        path.move(to: CGPoint(x: x(4.5), y: y(0)))
         path.addArc(center: CGPoint(x: x(0), y: y(0)), radius: rect.width * 0.045, startAngle: .degrees(0), endAngle: .degrees(90), clockwise: false)
+        path.move(to: CGPoint(x: x(95.5), y: y(0)))
         path.addArc(center: CGPoint(x: x(100), y: y(0)), radius: rect.width * 0.045, startAngle: .degrees(180), endAngle: .degrees(90), clockwise: true)
         return path
     }
