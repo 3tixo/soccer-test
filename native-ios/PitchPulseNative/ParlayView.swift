@@ -7,8 +7,8 @@ struct ParlayView: View {
 
     @State private var title = ""
     @State private var stake = "10"
-    @State private var market = "Match winner"
-    @State private var pick = ""
+    @State private var legType: ParlayLegType = .homeWin
+    @State private var line = "2.5"
     @State private var multiplier = "2.00"
     @State private var selectedEventId: String?
     @State private var draftLegs: [ParlayLeg] = []
@@ -63,10 +63,20 @@ struct ParlayView: View {
             .background(Color.pitchSurface)
             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
 
-            HStack(spacing: 10) {
-                TextField("Market", text: $market)
-                    .fieldChrome()
-                TextField("Pick", text: $pick)
+            Picker("Leg type", selection: $legType) {
+                ForEach(ParlayLegType.allCases) { type in
+                    Text(type.rawValue).tag(type)
+                }
+            }
+            .pickerStyle(.menu)
+            .tint(.white)
+            .padding(12)
+            .background(Color.pitchSurface)
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+            if legType.needsLine {
+                TextField("Goal line, for example 2.5", text: $line)
+                    .keyboardType(.decimalPad)
                     .fieldChrome()
             }
 
@@ -132,7 +142,7 @@ struct ParlayView: View {
                     Text(ticket.title)
                         .font(.headline.weight(.black))
                         .foregroundStyle(.white)
-                    Text("\(ticket.progressText) • \(currency(ticket.stake)) stake • \(currency(ticket.potentialPayout)) payout")
+                    Text("\(ticket.progressText) - \(currency(ticket.stake)) stake - \(currency(ticket.potentialPayout)) payout")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
                 }
@@ -193,7 +203,7 @@ struct ParlayView: View {
                     .font(.subheadline.weight(.black))
                     .foregroundStyle(.white)
                     .lineLimit(1)
-                Text("\(leg.market): \(leg.pick) • x\(leg.multiplier.formatted(.number.precision(.fractionLength(2))))")
+                Text("\(leg.market): \(leg.pick) - x\(leg.multiplier.formatted(.number.precision(.fractionLength(2))))")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -239,18 +249,20 @@ struct ParlayView: View {
 
     private func addDraftLeg() {
         guard let event = selectedEvent else { return }
-        let finalPick = pick.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Custom pick" : pick
+        let goalLine = Double(line)
+        guard !legType.needsLine || goalLine != nil else { return }
         draftLegs.append(
             ParlayLeg(
                 eventId: event.id,
                 matchName: matchName(event),
-                market: market.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Market" : market,
-                pick: finalPick,
+                market: legType.marketTitle(event: event),
+                pick: legType.pickTitle(event: event, line: goalLine),
+                type: legType,
+                line: goalLine,
                 multiplier: Double(multiplier) ?? 1,
                 status: .pending
             )
         )
-        pick = ""
     }
 
     private func saveTicket() {

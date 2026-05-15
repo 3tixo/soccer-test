@@ -669,7 +669,7 @@ struct ShotMapBoard: View {
             ZStack(alignment: .topLeading) {
                 VStack(spacing: gap) {
                     ShotGoalArea(
-                        targetX: selected.flatMap { goalMouthX(for: $0, fieldRect: fieldRect, goalAreaRect: goalAreaRect) },
+                        targetX: selected.flatMap { isBlocked($0) ? nil : goalMouthX(for: $0, goalAreaWidth: goalAreaRect.width) },
                         isGoal: selected.map { isGoal($0) } ?? false
                     )
                     .frame(width: pitchWidth, height: goalAreaHeight)
@@ -726,15 +726,16 @@ struct ShotMapBoard: View {
     private func targetPoint(for shot: ShotMapItem, in rect: CGRect) -> CGPoint {
         let rawX = clamp(shot.playerCoordinates?.x ?? 50)
         let rawY = clamp(shot.playerCoordinates?.y ?? 50)
-        let targetY = clamp(shot.goalShotCoordinates?.y ?? shot.playerCoordinates?.y ?? 50)
 
-        if isBlocked(shot) && shot.goalShotCoordinates == nil {
+        if isBlocked(shot) {
+            let targetY = clamp(shot.goalShotCoordinates?.y ?? rawY)
             return CGPoint(
-                x: rect.minX + rect.width * CGFloat(rawY / 100),
+                x: rect.minX + rect.width * CGFloat((rawY * 0.88 + targetY * 0.12) / 100),
                 y: rect.minY + rect.height * CGFloat(max(rawX - 6, 0) / 100)
             )
         }
 
+        let targetY = clamp(shot.goalShotCoordinates?.y ?? shot.goalMouthCoordinates?.y ?? rawY)
         return CGPoint(x: rect.minX + rect.width * CGFloat(targetY / 100), y: rect.minY)
     }
 
@@ -748,10 +749,11 @@ struct ShotMapBoard: View {
         return type.contains("block") || location.contains("block")
     }
 
-    private func goalMouthX(for shot: ShotMapItem, fieldRect: CGRect, goalAreaRect: CGRect) -> CGFloat? {
+    private func goalMouthX(for shot: ShotMapItem, goalAreaWidth: CGFloat) -> CGFloat? {
         guard let rawY = shot.goalMouthCoordinates?.y ?? shot.goalShotCoordinates?.y else { return nil }
-        let x = fieldRect.minX + fieldRect.width * CGFloat(clamp(rawY) / 100)
-        return x - goalAreaRect.minX
+        let goalWidth = min(goalAreaWidth * 0.30, 98)
+        let goalLeft = (goalAreaWidth - goalWidth) / 2
+        return goalLeft + goalWidth * CGFloat(clamp(rawY) / 100)
     }
 
     private func clamp(_ value: Double) -> Double {

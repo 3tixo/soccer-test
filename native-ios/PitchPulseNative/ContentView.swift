@@ -100,7 +100,7 @@ struct ContentView: View {
                     Button {
                         Task {
                             await viewModel.select(league)
-                            alertManager.refresh(events: viewModel.events, league: viewModel.selectedLeague, favoriteStore: favoriteStore)
+                            refreshLoadedDataSideEffects()
                             rootTab = .matches
                         }
                     } label: {
@@ -183,7 +183,12 @@ struct ContentView: View {
 
     private func reloadCurrentData() async {
         await viewModel.load()
+        refreshLoadedDataSideEffects()
+    }
+
+    private func refreshLoadedDataSideEffects() {
         alertManager.refresh(events: viewModel.events, league: viewModel.selectedLeague, favoriteStore: favoriteStore)
+        parlayStore.refresh(events: viewModel.events)
     }
 
     private var header: some View {
@@ -263,7 +268,7 @@ struct ContentView: View {
                     Button {
                         Task {
                             await viewModel.select(league)
-                            alertManager.refresh(events: viewModel.events, league: viewModel.selectedLeague, favoriteStore: favoriteStore)
+                            refreshLoadedDataSideEffects()
                         }
                     } label: {
                         Text(league.name)
@@ -286,7 +291,7 @@ struct ContentView: View {
             Button {
                 Task {
                     await viewModel.shiftDate(by: -1)
-                    alertManager.refresh(events: viewModel.events, league: viewModel.selectedLeague, favoriteStore: favoriteStore)
+                    refreshLoadedDataSideEffects()
                 }
             } label: {
                 Image(systemName: "chevron.left")
@@ -311,7 +316,7 @@ struct ContentView: View {
             Button {
                 Task {
                     await viewModel.goToToday()
-                    alertManager.refresh(events: viewModel.events, league: viewModel.selectedLeague, favoriteStore: favoriteStore)
+                    refreshLoadedDataSideEffects()
                 }
             } label: {
                 Text("Today")
@@ -325,7 +330,7 @@ struct ContentView: View {
             Button {
                 Task {
                     await viewModel.shiftDate(by: 1)
-                    alertManager.refresh(events: viewModel.events, league: viewModel.selectedLeague, favoriteStore: favoriteStore)
+                    refreshLoadedDataSideEffects()
                 }
             } label: {
                 Image(systemName: "chevron.right")
