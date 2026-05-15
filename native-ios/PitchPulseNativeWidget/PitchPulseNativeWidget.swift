@@ -82,6 +82,7 @@ struct NativeWidgetEntry: TimelineEntry {
     let league: String
     let mode: String
     let status: String
+    let statusShort: String
     let detail: String
     let isLive: Bool
     let home: String
@@ -99,6 +100,7 @@ struct NativeWidgetProvider: AppIntentTimelineProvider {
             league: "Premier League",
             mode: "Live first",
             status: "45'",
+            statusShort: "45'",
             detail: "Live now",
             isLive: true,
             home: "Arsenal",
@@ -182,6 +184,7 @@ private func entry(from event: [String: Any], configuration: MatchWidgetIntent) 
         league: configuration.league.displayName,
         mode: configuration.display.label,
         status: live ? liveClock(event) : statusText(event),
+        statusShort: live ? liveClock(event) : compactStatusText(event),
         detail: matchDetail(event: event, homeScore: homeScore, awayScore: awayScore),
         isLive: live,
         home: teamName(home),
@@ -199,6 +202,7 @@ private func fallback(_ status: String, configuration: MatchWidgetIntent) -> Nat
         league: configuration.league.displayName,
         mode: configuration.display.label,
         status: status,
+        statusShort: status,
         detail: configuration.display.label,
         isLive: false,
         home: "Open PitchPulse",
@@ -223,6 +227,17 @@ private func statusText(_ event: [String: Any]) -> String {
     let type = status?["type"] as? String ?? ""
     if type == "finished" { return "FT" }
     return status?["description"] as? String ?? "Scheduled"
+}
+
+private func compactStatusText(_ event: [String: Any]) -> String {
+    switch state(event) {
+    case "post":
+        return "FT"
+    case "pre":
+        return kickoffTime(timestampValue(event["startTimestamp"]))
+    default:
+        return statusText(event)
+    }
 }
 
 private func liveClock(_ event: [String: Any]) -> String {
@@ -338,15 +353,15 @@ struct NativeWidgetView: View {
     }
 
     private var smallLayout: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 10) {
             widgetHeader(compact: true)
 
             Spacer(minLength: 0)
 
-            VStack(spacing: 10) {
-                scoreRow(name: entry.home, score: entry.homeScore, logoData: entry.homeLogoData, nameSize: 19, scoreSize: 28, logoSize: 22)
+            VStack(spacing: 9) {
+                scoreRow(name: entry.home, score: entry.homeScore, logoData: entry.homeLogoData, nameSize: 17, scoreSize: 25, logoSize: 20)
                 divider
-                scoreRow(name: entry.away, score: entry.awayScore, logoData: entry.awayLogoData, nameSize: 19, scoreSize: 28, logoSize: 22)
+                scoreRow(name: entry.away, score: entry.awayScore, logoData: entry.awayLogoData, nameSize: 17, scoreSize: 25, logoSize: 20)
             }
 
             Spacer(minLength: 0)
@@ -357,7 +372,8 @@ struct NativeWidgetView: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.78)
         }
-        .padding(16)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 13)
     }
 
     private var mediumLayout: some View {
@@ -365,9 +381,9 @@ struct NativeWidgetView: View {
             widgetHeader(compact: false)
 
             VStack(spacing: 11) {
-                scoreRow(name: entry.home, score: entry.homeScore, logoData: entry.homeLogoData, nameSize: 24, scoreSize: 34, logoSize: 28)
+                scoreRow(name: entry.home, score: entry.homeScore, logoData: entry.homeLogoData, nameSize: 22, scoreSize: 31, logoSize: 26)
                 divider
-                scoreRow(name: entry.away, score: entry.awayScore, logoData: entry.awayLogoData, nameSize: 24, scoreSize: 34, logoSize: 28)
+                scoreRow(name: entry.away, score: entry.awayScore, logoData: entry.awayLogoData, nameSize: 22, scoreSize: 31, logoSize: 26)
             }
 
             HStack(spacing: 6) {
@@ -389,7 +405,7 @@ struct NativeWidgetView: View {
     private func widgetHeader(compact: Bool) -> some View {
         HStack(alignment: .center, spacing: 8) {
             Text(leagueCode)
-                .font(.system(size: compact ? 15 : 17, weight: .medium, design: .rounded))
+                .font(.system(size: compact ? 14 : 16, weight: .medium, design: .rounded))
                 .foregroundStyle(.white.opacity(0.62))
                 .lineLimit(1)
                 .minimumScaleFactor(0.72)
@@ -401,7 +417,7 @@ struct NativeWidgetView: View {
     }
 
     private func scoreRow(name: String, score: String, logoData: Data?, nameSize: CGFloat, scoreSize: CGFloat, logoSize: CGFloat) -> some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 7) {
             TeamLogoMark(data: logoData, fallback: initials(name), size: logoSize)
 
             Text(name)
@@ -418,7 +434,7 @@ struct NativeWidgetView: View {
                 .monospacedDigit()
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
-                .frame(minWidth: scoreSize * 0.72, alignment: .trailing)
+                .frame(minWidth: scoreSize * 0.55, alignment: .trailing)
         }
     }
 
@@ -450,20 +466,21 @@ struct NativeWidgetView: View {
     }
 
     private var statusBadge: some View {
-        Text(entry.status)
-            .font(.caption2.weight(.black))
+        Text(entry.statusShort)
+            .font(.system(size: 11, weight: .black, design: .rounded))
             .foregroundStyle(.white.opacity(entry.isLive ? 0.96 : 0.82))
             .lineLimit(1)
-            .minimumScaleFactor(0.72)
-            .padding(.horizontal, 11)
-            .frame(height: CGFloat(28))
+            .minimumScaleFactor(0.62)
+            .padding(.horizontal, 8)
+            .frame(height: CGFloat(23))
+            .frame(maxWidth: CGFloat(82))
             .background {
                 Capsule()
-                    .fill(entry.isLive ? Color.red.opacity(0.92) : Color.white.opacity(0.13))
+                    .fill(entry.isLive ? Color.red.opacity(0.92) : Color.white.opacity(0.10))
             }
             .overlay {
                 Capsule()
-                    .stroke(Color.white.opacity(0.10), lineWidth: 1)
+                    .stroke(Color.white.opacity(0.08), lineWidth: 1)
             }
     }
 }
@@ -475,25 +492,19 @@ struct TeamLogoMark: View {
 
     var body: some View {
         ZStack {
-            Circle()
-                .fill(Color.white.opacity(0.08))
-
             if let image {
                 Image(uiImage: image)
                     .resizable()
                     .scaledToFit()
-                    .padding(2)
             } else {
                 Text(fallback)
                     .font(.system(size: size * 0.34, weight: .black, design: .rounded))
                     .foregroundStyle(.white.opacity(0.72))
                     .lineLimit(1)
                     .minimumScaleFactor(0.55)
-                    .padding(3)
             }
         }
         .frame(width: size, height: size)
-        .overlay(Circle().stroke(Color.white.opacity(0.10), lineWidth: 1))
     }
 
     private var image: UIImage? {

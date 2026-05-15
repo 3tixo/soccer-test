@@ -37,19 +37,12 @@ struct SofaScoreService {
     }
 
     func fetchSummary(leagueId: String, eventId: String) async throws -> MatchSummary {
-        async let eventDetail: SofaEventResponse? = optionalFetch("/event/\(eventId)")
-        async let incidents: SofaIncidentsResponse? = optionalFetch("/event/\(eventId)/incidents")
-        async let statistics: SofaStatisticsResponse? = optionalFetch("/event/\(eventId)/statistics")
-        async let lineups: SofaLineupsResponse? = optionalFetch("/event/\(eventId)/lineups")
-        async let news: SofaEventNewsResponse? = optionalFetch("/event/\(eventId)/media/news")
-        async let odds: SofaFeaturedOddsResponse? = optionalFetch("/event/\(eventId)/odds/1/featured")
-
-        let loadedEventDetail = await eventDetail
-        let loadedIncidents = await incidents
-        let loadedStatistics = await statistics
-        let loadedLineups = await lineups
-        let loadedNews = await news
-        let loadedOdds = await odds
+        let loadedEventDetail: SofaEventResponse? = await optionalFetch("/event/\(eventId)")
+        let loadedIncidents: SofaIncidentsResponse? = await optionalFetch("/event/\(eventId)/incidents")
+        let loadedStatistics: SofaStatisticsResponse? = await optionalFetch("/event/\(eventId)/statistics")
+        let loadedLineups: SofaLineupsResponse? = await optionalFetch("/event/\(eventId)/lineups")
+        let loadedNews: SofaEventNewsResponse? = await optionalFetch("/event/\(eventId)/media/news")
+        let loadedOdds: SofaFeaturedOddsResponse? = await optionalFetch("/event/\(eventId)/odds/1/featured")
 
         return MatchSummary(
             keyEvents: mapIncidents(loadedIncidents?.incidents ?? []),
@@ -67,9 +60,9 @@ struct SofaScoreService {
     }
 
     func fetchTeamSchedule(leagueId: String, teamId: String) async throws -> [ScoreEvent] {
-        async let previous: SofaEventsResponse? = optionalFetch("/team/\(teamId)/events/last/0")
-        async let next: SofaEventsResponse? = optionalFetch("/team/\(teamId)/events/next/0")
-        let events = ((await previous)?.events ?? []) + ((await next)?.events ?? [])
+        let previous: SofaEventsResponse? = await optionalFetch("/team/\(teamId)/events/last/0")
+        let next: SofaEventsResponse? = await optionalFetch("/team/\(teamId)/events/next/0")
+        let events = (previous?.events ?? []) + (next?.events ?? [])
         return events.map(mapEvent)
     }
 
@@ -538,23 +531,19 @@ final class ScoreboardViewModel: ObservableObject {
         errorMessage = nil
         let shouldUseDefaultDate = useProviderDefaultDate ?? !hasUserPickedDate
 
-        async let scoreboardResult: Result<ScoreboardResponse, Error> = captureProviderResult {
+        let scoreboardOutcome: Result<ScoreboardResponse, Error> = await captureProviderResult {
             try await service.fetchScoreboard(
                 leagueId: league.id,
                 date: date,
                 useProviderDefaultDate: shouldUseDefaultDate
             )
         }
-        async let standingResult: Result<[StandingEntry], Error> = captureProviderResult {
+        let standingsOutcome: Result<[StandingEntry], Error> = await captureProviderResult {
             try await service.fetchStandings(leagueId: league.id)
         }
-        async let newsResult: Result<[NewsArticle], Error> = captureProviderResult {
+        let newsOutcome: Result<[NewsArticle], Error> = await captureProviderResult {
             try await service.fetchNews(leagueId: league.id)
         }
-
-        let scoreboardOutcome = await scoreboardResult
-        let standingsOutcome = await standingResult
-        let newsOutcome = await newsResult
 
         guard generation == loadGeneration else { return }
 

@@ -279,13 +279,9 @@ struct TeamDetailView: View {
         }
 
         isLoadingDetails = true
-        async let profile: Team? = try? service.fetchTeamProfile(leagueId: league.id, teamId: teamId)
-        async let schedule: [ScoreEvent]? = try? service.fetchTeamSchedule(leagueId: league.id, teamId: teamId)
-        async let news: [NewsArticle]? = try? service.fetchTeamNews(leagueId: league.id, teamId: teamId)
-
-        profileTeam = await profile ?? context.team
-        scheduleEvents = await schedule ?? []
-        teamArticles = await news ?? []
+        profileTeam = (try? await service.fetchTeamProfile(leagueId: league.id, teamId: teamId)) ?? context.team
+        scheduleEvents = (try? await service.fetchTeamSchedule(leagueId: league.id, teamId: teamId)) ?? []
+        teamArticles = (try? await service.fetchTeamNews(leagueId: league.id, teamId: teamId)) ?? []
         isLoadingDetails = false
     }
 
