@@ -1,6 +1,7 @@
 import AppIntents
 import Foundation
 import SwiftUI
+import UIKit
 import WidgetKit
 
 enum WidgetLeagueOption: String, AppEnum {
@@ -81,10 +82,14 @@ struct NativeWidgetEntry: TimelineEntry {
     let league: String
     let mode: String
     let status: String
+    let detail: String
     let isLive: Bool
     let home: String
     let away: String
-    let score: String
+    let homeScore: String
+    let awayScore: String
+    let homeLogoData: Data?
+    let awayLogoData: Data?
 }
 
 struct NativeWidgetProvider: AppIntentTimelineProvider {
@@ -94,10 +99,14 @@ struct NativeWidgetProvider: AppIntentTimelineProvider {
             league: "Premier League",
             mode: "Live first",
             status: "45'",
+            detail: "Live now",
             isLive: true,
             home: "Arsenal",
             away: "Chelsea",
-            score: "1-0"
+            homeScore: "1",
+            awayScore: "0",
+            homeLogoData: nil,
+            awayLogoData: nil
         )
     }
 
@@ -133,7 +142,7 @@ struct NativeWidgetProvider: AppIntentTimelineProvider {
                 return fallback("No matches", configuration: configuration)
             }
 
-            return entry(from: event, configuration: configuration)
+            return await entry(from: event, configuration: configuration)
         } catch {
             return fallback("SofaScore unavailable", configuration: configuration)
         }
@@ -158,22 +167,29 @@ private func bestEvent(_ events: [[String: Any]], mode: WidgetDisplayOption) -> 
     }
 }
 
-private func entry(from event: [String: Any], configuration: MatchWidgetIntent) -> NativeWidgetEntry {
+private func entry(from event: [String: Any], configuration: MatchWidgetIntent) async -> NativeWidgetEntry {
     let home = event["homeTeam"] as? [String: Any] ?? [:]
     let away = event["awayTeam"] as? [String: Any] ?? [:]
     let isPre = state(event) == "pre"
     let live = state(event) == "in"
-    let score = isPre ? kickoffTime(timestampValue(event["startTimestamp"])) : "\(scoreText(event["homeScore"] as? [String: Any]))-\(scoreText(event["awayScore"] as? [String: Any]))"
+    let homeScore = isPre ? "-" : scoreText(event["homeScore"] as? [String: Any])
+    let awayScore = isPre ? "-" : scoreText(event["awayScore"] as? [String: Any])
+    async let homeLogo = logoData(for: home)
+    async let awayLogo = logoData(for: away)
 
     return NativeWidgetEntry(
         date: Date(),
         league: configuration.league.displayName,
         mode: configuration.display.label,
         status: live ? liveClock(event) : statusText(event),
+        detail: matchDetail(event: event, homeScore: homeScore, awayScore: awayScore),
         isLive: live,
         home: teamName(home),
         away: teamName(away),
-        score: score
+        homeScore: homeScore,
+        awayScore: awayScore,
+        homeLogoData: await homeLogo,
+        awayLogoData: await awayLogo
     )
 }
 
@@ -183,10 +199,14 @@ private func fallback(_ status: String, configuration: MatchWidgetIntent) -> Nat
         league: configuration.league.displayName,
         mode: configuration.display.label,
         status: status,
+        detail: configuration.display.label,
         isLive: false,
         home: "Open PitchPulse",
         away: "to refresh scores",
-        score: "-:-"
+        homeScore: "-",
+        awayScore: "-",
+        homeLogoData: nil,
+        awayLogoData: nil
     )
 }
 
@@ -216,6 +236,32 @@ private func teamName(_ team: [String: Any]) -> String {
         ?? "TBA"
 }
 
+private func logoData(for team: [String: Any]) async -> Data? {
+    guard let id = teamId(team),
+          let url = URL(string: "https://img.sofascore.com/api/v1/team/\(id)/image")
+    else {
+        return nil
+    }
+
+    do {
+        var request = URLRequest(url: url)
+        request.setValue("image/*,*/*;q=0.8", forHTTPHeaderField: "Accept")
+        request.setValue("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1", forHTTPHeaderField: "User-Agent")
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard (response as? HTTPURLResponse)?.statusCode == 200 else { return nil }
+        return data
+    } catch {
+        return nil
+    }
+}
+
+private func teamId(_ team: [String: Any]) -> String? {
+    if let id = team["id"] as? Int { return String(id) }
+    if let id = team["id"] as? Int64 { return String(id) }
+    if let id = team["id"] as? Double { return String(Int(id)) }
+    return team["id"] as? String
+}
+
 private func scoreText(_ score: [String: Any]?) -> String {
     score?["display"] as? String
         ?? (score?["display"] as? Int).map { String($0) }
@@ -227,6 +273,21 @@ private func kickoffTime(_ timestamp: Int64?) -> String {
     guard let timestamp else { return "TBA" }
     let date = Date(timeIntervalSince1970: TimeInterval(timestamp))
     return date.formatted(date: .omitted, time: .shortened)
+}
+
+private func matchDetail(event: [String: Any], homeScore: String, awayScore: String) -> String {
+    switch state(event) {
+    case "in":
+        return "Live now"
+    case "post":
+        if let home = Int(homeScore), let away = Int(awayScore) {
+            if home == away { return "Full time • Draw" }
+            return home > away ? "Full time • Home won" : "Full time • Away won"
+        }
+        return "Full time"
+    default:
+        return "Kickoff • \(kickoffTime(timestampValue(event["startTimestamp"])))"
+    }
 }
 
 private func eventDate(_ event: [String: Any]) -> Date {
@@ -277,102 +338,167 @@ struct NativeWidgetView: View {
     }
 
     private var smallLayout: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            HStack(spacing: 6) {
-                Text("PULSE")
-                    .font(.caption2.weight(.black))
-                    .foregroundStyle(.white.opacity(0.66))
-                Spacer(minLength: 4)
-                statusBadge
-            }
-
-            Text(entry.league.uppercased())
-                .font(.caption2.weight(.black))
-                .foregroundStyle(.white.opacity(0.48))
-                .lineLimit(1)
-                .minimumScaleFactor(0.72)
-
-            Text(entry.score)
-                .font(.system(size: 30, weight: .black, design: .rounded))
-                .monospacedDigit()
-                .lineLimit(1)
-                .minimumScaleFactor(0.62)
-                .frame(maxWidth: .infinity, alignment: .leading)
+        VStack(alignment: .leading, spacing: 12) {
+            widgetHeader(compact: true)
 
             Spacer(minLength: 0)
 
-            VStack(alignment: .leading, spacing: 3) {
-                teamText(entry.home, size: 14)
-                teamText(entry.away, size: 14)
+            VStack(spacing: 10) {
+                scoreRow(name: entry.home, score: entry.homeScore, logoData: entry.homeLogoData, nameSize: 19, scoreSize: 28, logoSize: 22)
+                divider
+                scoreRow(name: entry.away, score: entry.awayScore, logoData: entry.awayLogoData, nameSize: 19, scoreSize: 28, logoSize: 22)
             }
+
+            Spacer(minLength: 0)
+
+            Text(entry.detail)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.white.opacity(0.52))
+                .lineLimit(1)
+                .minimumScaleFactor(0.78)
         }
-        .padding(13)
+        .padding(16)
     }
 
     private var mediumLayout: some View {
-        HStack(alignment: .center, spacing: 14) {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 6) {
-                    Text("PitchPulse")
-                        .font(.caption.weight(.black))
-                        .foregroundStyle(.white.opacity(0.72))
-                    statusBadge
-                }
+        VStack(alignment: .leading, spacing: 12) {
+            widgetHeader(compact: false)
 
-                Text(entry.league.uppercased())
-                    .font(.caption2.weight(.black))
-                    .foregroundStyle(.white.opacity(0.48))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.75)
-
-                Text(entry.mode)
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(.white.opacity(0.62))
-                    .lineLimit(1)
-
-                Spacer(minLength: 0)
-
-                VStack(alignment: .leading, spacing: 5) {
-                    teamText(entry.home, size: 17)
-                    teamText(entry.away, size: 17)
-                }
+            VStack(spacing: 11) {
+                scoreRow(name: entry.home, score: entry.homeScore, logoData: entry.homeLogoData, nameSize: 24, scoreSize: 34, logoSize: 28)
+                divider
+                scoreRow(name: entry.away, score: entry.awayScore, logoData: entry.awayLogoData, nameSize: 24, scoreSize: 34, logoSize: 28)
             }
 
-            Spacer(minLength: 4)
-
-            Text(entry.score)
-                .font(.system(size: 38, weight: .black, design: .rounded))
-                .monospacedDigit()
-                .lineLimit(1)
-                .minimumScaleFactor(0.55)
-                .frame(minWidth: 82, alignment: .trailing)
+            HStack(spacing: 6) {
+                Text(entry.detail)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.white.opacity(0.52))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                Spacer(minLength: 8)
+                Text(entry.mode)
+                    .font(.caption2.weight(.black))
+                    .foregroundStyle(.white.opacity(0.34))
+                    .lineLimit(1)
+            }
         }
-        .padding(14)
+        .padding(18)
     }
 
-    private func teamText(_ value: String, size: CGFloat) -> some View {
-        Text(value)
-            .font(.system(size: size, weight: .black, design: .rounded))
-            .lineLimit(1)
-            .minimumScaleFactor(0.58)
+    private func widgetHeader(compact: Bool) -> some View {
+        HStack(alignment: .center, spacing: 8) {
+            Text(leagueCode)
+                .font(.system(size: compact ? 15 : 17, weight: .medium, design: .rounded))
+                .foregroundStyle(.white.opacity(0.62))
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
+
+            Spacer(minLength: 6)
+
+            statusBadge
+        }
+    }
+
+    private func scoreRow(name: String, score: String, logoData: Data?, nameSize: CGFloat, scoreSize: CGFloat, logoSize: CGFloat) -> some View {
+        HStack(spacing: 8) {
+            TeamLogoMark(data: logoData, fallback: initials(name), size: logoSize)
+
+            Text(name)
+                .font(.system(size: nameSize, weight: .black, design: .rounded))
+                .foregroundStyle(.white)
+                .lineLimit(1)
+                .minimumScaleFactor(0.55)
+
+            Spacer(minLength: 8)
+
+            Text(score)
+                .font(.system(size: scoreSize, weight: .black, design: .rounded))
+                .foregroundStyle(.white)
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+                .frame(minWidth: scoreSize * 0.72, alignment: .trailing)
+        }
+    }
+
+    private var divider: some View {
+        Rectangle()
+            .fill(Color.white.opacity(0.10))
+            .frame(height: 1)
+    }
+
+    private var leagueCode: String {
+        switch entry.league {
+        case "Champions League": return "UCL"
+        case "Premier League": return "EPL"
+        case "LALIGA": return "LALIGA"
+        case "Serie A": return "SERIE A"
+        case "Bundesliga": return "BUND"
+        case "Ligue 1": return "L1"
+        default: return entry.league.uppercased()
+        }
+    }
+
+    private func initials(_ value: String) -> String {
+        let words = value.split(separator: " ")
+        let letters = words.prefix(2).compactMap { $0.first }
+        if letters.isEmpty {
+            return String(value.prefix(2)).uppercased()
+        }
+        return String(letters).uppercased()
     }
 
     private var statusBadge: some View {
         Text(entry.status)
             .font(.caption2.weight(.black))
-            .foregroundStyle(entry.isLive ? .white : .white.opacity(0.56))
+            .foregroundStyle(.white.opacity(entry.isLive ? 0.96 : 0.82))
             .lineLimit(1)
             .minimumScaleFactor(0.72)
-            .padding(.horizontal, entry.isLive ? 7 : 6)
-            .frame(height: CGFloat(20))
+            .padding(.horizontal, 11)
+            .frame(height: CGFloat(28))
             .background {
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(entry.isLive ? Color.red.opacity(0.92) : Color.white.opacity(0.08))
+                Capsule()
+                    .fill(entry.isLive ? Color.red.opacity(0.92) : Color.white.opacity(0.13))
             }
             .overlay {
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                Capsule()
                     .stroke(Color.white.opacity(0.10), lineWidth: 1)
             }
+    }
+}
+
+struct TeamLogoMark: View {
+    let data: Data?
+    let fallback: String
+    let size: CGFloat
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(Color.white.opacity(0.08))
+
+            if let image {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFit()
+                    .padding(2)
+            } else {
+                Text(fallback)
+                    .font(.system(size: size * 0.34, weight: .black, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.72))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.55)
+                    .padding(3)
+            }
+        }
+        .frame(width: size, height: size)
+        .overlay(Circle().stroke(Color.white.opacity(0.10), lineWidth: 1))
+    }
+
+    private var image: UIImage? {
+        guard let data else { return nil }
+        return UIImage(data: data)
     }
 }
 
@@ -406,5 +532,6 @@ struct PitchPulseNativeWidget: Widget {
         .configurationDisplayName("PitchPulse Match")
         .description("Choose a league and show live-first, next match, or latest result.")
         .supportedFamilies([.systemSmall, .systemMedium])
+        .contentMarginsDisabled()
     }
 }
