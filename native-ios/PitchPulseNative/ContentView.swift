@@ -5,9 +5,11 @@ struct ContentView: View {
     @StateObject private var viewModel = ScoreboardViewModel()
     @StateObject private var alertManager = MatchAlertManager()
     @StateObject private var favoriteStore = FavoriteStore()
+    @StateObject private var parlayStore = ParlayStore()
     @State private var rootTab: RootTab = .matches
     @State private var selectedMatch: SelectedMatch?
     @State private var selectedTeam: TeamDetailContext?
+    @State private var showingParlays = false
 
     var body: some View {
         TabView(selection: $rootTab) {
@@ -24,10 +26,10 @@ struct ContentView: View {
             .tag(RootTab.favorites)
 
             NavigationStack {
-                leaguesRoot
+                sportsRoot
             }
-            .tabItem { Label("Leagues", systemImage: "list.bullet.rectangle") }
-            .tag(RootTab.leagues)
+            .tabItem { Label("Sports", systemImage: "soccerball") }
+            .tag(RootTab.sports)
 
             NavigationStack {
                 searchRoot
@@ -53,6 +55,11 @@ struct ContentView: View {
         }
         .sheet(item: $selectedTeam) { context in
             TeamDetailView(context: context, league: viewModel.selectedLeague, favoriteStore: favoriteStore)
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+        }
+        .sheet(isPresented: $showingParlays) {
+            ParlayView(events: viewModel.events, league: viewModel.selectedLeague, store: parlayStore)
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
         }
@@ -82,8 +89,10 @@ struct ContentView: View {
         }
     }
 
-    private var leaguesRoot: some View {
+    private var sportsRoot: some View {
         screen {
+            SectionTitle(kicker: "Sports", title: "Football")
+            StateCard(title: "Football only", detail: "More sports can be added later. Right now Pulse is focused on soccer matches and clubs.")
             SectionTitle(kicker: "Competitions", title: "Leagues")
 
             LazyVStack(spacing: 10) {
@@ -180,7 +189,7 @@ struct ContentView: View {
     private var header: some View {
         HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 3) {
-                Text("PitchPulse")
+                Text("Pulse")
                     .font(.system(size: 32, weight: .black, design: .rounded))
                     .foregroundStyle(.white)
             }
@@ -197,6 +206,18 @@ struct ContentView: View {
                     .foregroundStyle(alertManager.isEnabled ? Color.pitchBackground : .white)
                     .frame(width: 44, height: 44)
                     .background(alertManager.isEnabled ? Color.pitchAccent : Color.pitchSurface)
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            }
+            .buttonStyle(.plain)
+
+            Button {
+                showingParlays = true
+            } label: {
+                Image(systemName: "ticket.fill")
+                    .font(.headline.weight(.black))
+                    .foregroundStyle(.white)
+                    .frame(width: 44, height: 44)
+                    .background(Color.pitchSurface)
                     .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             }
             .buttonStyle(.plain)
@@ -230,6 +251,14 @@ struct ContentView: View {
     private var leagueStrip: some View {
         ScrollView(.horizontal) {
             HStack(spacing: 8) {
+                Text("Football")
+                    .font(.subheadline.weight(.black))
+                    .foregroundStyle(Color.pitchBackground)
+                    .padding(.horizontal, 14)
+                    .frame(height: 46)
+                    .background(Color.pitchAccent)
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+
                 ForEach(nativeLeagues) { league in
                     Button {
                         Task {
@@ -619,7 +648,7 @@ struct ContentView: View {
 private enum RootTab: String, CaseIterable, Identifiable {
     case matches
     case favorites
-    case leagues
+    case sports
     case search
     case settings
 

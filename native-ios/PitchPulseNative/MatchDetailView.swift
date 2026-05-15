@@ -645,11 +645,11 @@ struct ShotMapBoard: View {
     private var shotPitch: some View {
         GeometryReader { proxy in
             let width = proxy.size.width
-            let pitchWidth = min(width, 344)
+            let pitchWidth = min(width, 312)
             let fieldPadding: CGFloat = 12
-            let fieldWidth = max(1, pitchWidth - fieldPadding * 2)
+            let fieldWidth = max(1, pitchWidth - 32)
             let fieldHeight = fieldWidth * 0.75
-            let goalAreaHeight: CGFloat = 92
+            let goalAreaHeight: CGFloat = 102
             let gap: CGFloat = 4
             let fieldTop = goalAreaHeight + gap + fieldPadding
             let fieldRect = CGRect(
@@ -669,7 +669,7 @@ struct ShotMapBoard: View {
             ZStack(alignment: .topLeading) {
                 VStack(spacing: gap) {
                     ShotGoalArea(
-                        targetX: selected.map { targetPoint(for: $0, in: fieldRect).x - goalAreaRect.minX },
+                        targetX: selected.flatMap { goalMouthX(for: $0, fieldRect: fieldRect, goalAreaRect: goalAreaRect) },
                         isGoal: selected.map { isGoal($0) } ?? false
                     )
                     .frame(width: pitchWidth, height: goalAreaHeight)
@@ -709,7 +709,7 @@ struct ShotMapBoard: View {
                 }
             }
         }
-        .frame(height: 360)
+        .frame(height: 352)
     }
 
     private func point(for shot: ShotMapItem, in rect: CGRect) -> CGPoint {
@@ -724,13 +724,34 @@ struct ShotMapBoard: View {
     }
 
     private func targetPoint(for shot: ShotMapItem, in rect: CGRect) -> CGPoint {
-        let rawY = clamp(shot.goalMouthCoordinates?.y ?? shot.playerCoordinates?.y ?? 50)
-        let horizontal = 100 - rawY
-        return CGPoint(x: rect.minX + rect.width * CGFloat(horizontal / 100), y: rect.minY)
+        let rawX = clamp(shot.playerCoordinates?.x ?? 50)
+        let rawY = clamp(shot.playerCoordinates?.y ?? 50)
+        let targetY = clamp(shot.goalShotCoordinates?.y ?? shot.playerCoordinates?.y ?? 50)
+
+        if isBlocked(shot) && shot.goalShotCoordinates == nil {
+            return CGPoint(
+                x: rect.minX + rect.width * CGFloat(rawY / 100),
+                y: rect.minY + rect.height * CGFloat(max(rawX - 6, 0) / 100)
+            )
+        }
+
+        return CGPoint(x: rect.minX + rect.width * CGFloat(targetY / 100), y: rect.minY)
     }
 
     private func isGoal(_ shot: ShotMapItem) -> Bool {
         (shot.shotType ?? "").lowercased().contains("goal")
+    }
+
+    private func isBlocked(_ shot: ShotMapItem) -> Bool {
+        let type = (shot.shotType ?? "").lowercased()
+        let location = (shot.goalMouthLocation ?? "").lowercased()
+        return type.contains("block") || location.contains("block")
+    }
+
+    private func goalMouthX(for shot: ShotMapItem, fieldRect: CGRect, goalAreaRect: CGRect) -> CGFloat? {
+        guard let rawY = shot.goalMouthCoordinates?.y ?? shot.goalShotCoordinates?.y else { return nil }
+        let x = fieldRect.minX + fieldRect.width * CGFloat(clamp(rawY) / 100)
+        return x - goalAreaRect.minX
     }
 
     private func clamp(_ value: Double) -> Double {

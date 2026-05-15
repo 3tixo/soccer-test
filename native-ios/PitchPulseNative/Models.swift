@@ -344,6 +344,7 @@ struct ShotMapItem: Decodable, Identifiable {
     let player: ShotPlayer?
     let playerCoordinates: ShotCoordinates?
     let goalMouthCoordinates: ShotCoordinates?
+    let goalShotCoordinates: ShotCoordinates?
     let shotType: String?
     let situation: String?
     let bodyPart: String?
@@ -359,6 +360,7 @@ struct ShotMapItem: Decodable, Identifiable {
         case player
         case playerCoordinates
         case goalMouthCoordinates
+        case goalShotCoordinates
         case shotType
         case situation
         case bodyPart
@@ -384,6 +386,7 @@ struct ShotMapItem: Decodable, Identifiable {
         player = try container.decodeIfPresent(ShotPlayer.self, forKey: .player)
         playerCoordinates = try container.decodeIfPresent(ShotCoordinates.self, forKey: .playerCoordinates)
         goalMouthCoordinates = try container.decodeIfPresent(ShotCoordinates.self, forKey: .goalMouthCoordinates)
+        goalShotCoordinates = try container.decodeIfPresent(ShotCoordinates.self, forKey: .goalShotCoordinates)
         shotType = try container.decodeIfPresent(String.self, forKey: .shotType)
         situation = try container.decodeIfPresent(String.self, forKey: .situation)
         bodyPart = try container.decodeIfPresent(String.self, forKey: .bodyPart)

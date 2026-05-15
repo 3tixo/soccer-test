@@ -80,7 +80,7 @@ enum WidgetDisplayOption: String, AppEnum {
 }
 
 struct MatchWidgetIntent: WidgetConfigurationIntent {
-    static var title: LocalizedStringResource = "PitchPulse Match"
+    static var title: LocalizedStringResource = "Pulse Match"
     static var description = IntentDescription("Choose the league and match type shown on the widget.")
 
     @Parameter(title: "League", default: .premierLeague)
@@ -288,7 +288,7 @@ private func fallback(_ status: String, configuration: MatchWidgetIntent) -> Nat
         statusShort: status,
         detail: configuration.display.label,
         isLive: false,
-        home: "Open PitchPulse",
+        home: "Open Pulse",
         away: "to refresh scores",
         homeScore: "-",
         awayScore: "-",
@@ -634,7 +634,7 @@ struct PitchPulseMatchWidget: Widget {
         AppIntentConfiguration(kind: "PitchPulseNativeWidget", intent: MatchWidgetIntent.self, provider: NativeWidgetProvider()) { entry in
             NativeWidgetView(entry: entry)
         }
-        .configurationDisplayName("PitchPulse Match")
+        .configurationDisplayName("Pulse Match")
         .description("Choose a league and show live-first, next match, or latest result.")
         .supportedFamilies([.systemSmall, .systemMedium])
         .contentMarginsDisabled()
@@ -675,6 +675,81 @@ struct PitchPulseLiveActivityWidget: Widget {
     }
 }
 
+struct PulseParlayLiveActivityWidget: Widget {
+    var body: some WidgetConfiguration {
+        ActivityConfiguration(for: ParlayLiveActivityAttributes.self) { context in
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Text(context.attributes.title)
+                        .font(.caption2.weight(.black))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                    Spacer()
+                    Text(context.state.status.uppercased())
+                        .font(.caption.weight(.black))
+                        .foregroundStyle(context.state.status == "Lost" ? .white : Color.black)
+                        .padding(.horizontal, 10)
+                        .frame(height: 24)
+                        .background(context.state.status == "Lost" ? Color.red.opacity(0.90) : Color.green)
+                        .clipShape(Capsule())
+                }
+
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(context.state.progress)
+                            .font(.system(size: 22, weight: .black, design: .rounded))
+                            .foregroundStyle(.white)
+                        Text(context.state.detail)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                    Spacer()
+                    Text(context.state.payout)
+                        .font(.system(size: 24, weight: .black, design: .rounded))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.65)
+                }
+            }
+            .padding(16)
+            .activityBackgroundTint(Color(red: 0.02, green: 0.022, blue: 0.026))
+            .activitySystemActionForegroundColor(.white)
+        } dynamicIsland: { context in
+            DynamicIsland {
+                DynamicIslandExpandedRegion(.leading) {
+                    Text(context.attributes.title)
+                        .font(.caption2.weight(.black))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.45)
+                        .frame(maxWidth: 76, alignment: .leading)
+                }
+                DynamicIslandExpandedRegion(.trailing) {
+                    Text(context.state.payout)
+                        .font(.caption.weight(.black))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.55)
+                }
+                DynamicIslandExpandedRegion(.bottom) {
+                    Text("\(context.state.progress) • \(context.state.status)")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            } compactLeading: {
+                Text(context.state.progress.split(separator: "/").first.map(String.init) ?? "0")
+                    .font(.caption.weight(.black))
+            } compactTrailing: {
+                Text(String(context.state.status.prefix(1)))
+                    .font(.caption.weight(.black))
+            } minimal: {
+                Text("P")
+                    .font(.caption2.weight(.black))
+            }
+        }
+    }
+}
+
 struct LiveActivityLockScreenView: View {
     let context: ActivityViewContext<MatchLiveActivityAttributes>
 
@@ -695,8 +770,10 @@ struct LiveActivityLockScreenView: View {
                     .clipShape(Capsule())
             }
 
-            LiveActivityScoreRow(name: context.attributes.homeName, score: context.state.homeScore)
-            LiveActivityScoreRow(name: context.attributes.awayName, score: context.state.awayScore)
+            scoreRow(name: context.attributes.homeName, score: context.state.homeScore)
+            Divider()
+                .overlay(Color.white.opacity(0.08))
+            scoreRow(name: context.attributes.awayName, score: context.state.awayScore)
 
             Text(context.state.detail)
                 .font(.caption.weight(.semibold))
@@ -707,24 +784,20 @@ struct LiveActivityLockScreenView: View {
         .activityBackgroundTint(Color(red: 0.02, green: 0.022, blue: 0.026))
         .activitySystemActionForegroundColor(.white)
     }
-}
 
-struct LiveActivityScoreRow: View {
-    let name: String
-    let score: String
-
-    var body: some View {
+    private func scoreRow(name: String, score: String) -> some View {
         HStack(spacing: 10) {
             Text(name)
-                .font(.headline.weight(.black))
+                .font(.system(size: 22, weight: .black, design: .rounded))
                 .foregroundStyle(.white)
                 .lineLimit(1)
-                .minimumScaleFactor(0.65)
+                .minimumScaleFactor(0.55)
             Spacer(minLength: 8)
             Text(score)
-                .font(.title2.weight(.black))
+                .font(.system(size: 31, weight: .black, design: .rounded))
                 .foregroundStyle(.white)
                 .monospacedDigit()
+                .lineLimit(1)
         }
     }
 }
@@ -741,11 +814,12 @@ struct LiveActivityTeamName: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(name)
-                .font(.caption.weight(.bold))
+                .font(.caption2.weight(.black))
                 .lineLimit(1)
-                .minimumScaleFactor(0.7)
+                .minimumScaleFactor(0.45)
+                .frame(maxWidth: 74, alignment: .leading)
             Text(score)
-                .font(.title3.weight(.black))
+                .font(.headline.weight(.black))
                 .monospacedDigit()
         }
     }
@@ -756,5 +830,6 @@ struct PitchPulseNativeWidgetBundle: WidgetBundle {
     var body: some Widget {
         PitchPulseMatchWidget()
         PitchPulseLiveActivityWidget()
+        PulseParlayLiveActivityWidget()
     }
 }
