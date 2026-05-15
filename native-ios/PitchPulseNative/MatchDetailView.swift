@@ -43,6 +43,7 @@ struct MatchDetailView: View {
 
     private var scoreboard: some View {
         let teams = event.matchTeams
+        let isPreMatch = event.status?.type?.state == "pre"
 
         return VStack(spacing: 14) {
             Text(league.name.uppercased())
@@ -54,11 +55,11 @@ struct MatchDetailView: View {
 
                 VStack(spacing: 4) {
                     Text(scoreText)
-                        .font(.system(size: event.status?.type?.state == "pre" ? 23 : 34, weight: .black, design: .rounded))
+                        .font(.system(size: isPreMatch ? 19 : 34, weight: .black, design: .rounded))
                         .foregroundStyle(.white)
                         .monospacedDigit()
                         .lineLimit(1)
-                        .minimumScaleFactor(0.62)
+                        .minimumScaleFactor(0.52)
                     Text(event.status?.statusPillText ?? "Scheduled")
                         .font(.caption.weight(.black))
                         .foregroundStyle(event.status?.isLive == true ? .white : .secondary)
@@ -73,7 +74,7 @@ struct MatchDetailView: View {
                             }
                         }
                 }
-                .frame(minWidth: 104)
+                .frame(minWidth: isPreMatch ? 128 : 104)
 
                 detailTeam(teams.away)
             }
@@ -552,7 +553,11 @@ struct ShotMapBoard: View {
     }
 
     private var selectedShot: ShotMapItem? {
-        displayShots.first { $0.id == selectedShotId } ?? displayShots.first
+        displayShots.first { $0.id == selectedShotId } ?? preferredShot
+    }
+
+    private var preferredShot: ShotMapItem? {
+        displayShots.first { isGoal($0) } ?? displayShots.first
     }
 
     var body: some View {
@@ -566,19 +571,24 @@ struct ShotMapBoard: View {
             }
 
             shotPitch
+                .frame(maxWidth: .infinity)
 
             if let selectedShot {
                 ShotDetailCard(shot: selectedShot)
+                    .frame(maxWidth: 344)
+                    .frame(maxWidth: .infinity, alignment: .center)
             }
         }
         .onAppear {
             if homeShots.isEmpty && !awayShots.isEmpty {
                 selectedHome = false
+                selectedShotId = awayShots.first { isGoal($0) }?.id ?? awayShots.first?.id
+            } else {
+                selectedShotId = preferredShot?.id
             }
-            selectedShotId = selectedShot?.id
         }
         .onChange(of: selectedHome) { _ in
-            selectedShotId = displayShots.first?.id
+            selectedShotId = preferredShot?.id
         }
     }
 
@@ -611,32 +621,57 @@ struct ShotMapBoard: View {
     private var shotPitch: some View {
         GeometryReader { proxy in
             let width = proxy.size.width
-            let fieldTop: CGFloat = 34
-            let fieldHeight = proxy.size.height - fieldTop
+            let pitchWidth = min(width, 344)
+            let fieldPadding: CGFloat = 12
+            let fieldWidth = max(1, pitchWidth - fieldPadding * 2)
+            let fieldHeight = fieldWidth * 0.75
+            let goalAreaHeight: CGFloat = 102
+            let gap: CGFloat = 4
+            let fieldTop = goalAreaHeight + gap + fieldPadding
+            let fieldRect = CGRect(
+                x: (width - pitchWidth) / 2 + fieldPadding,
+                y: fieldTop,
+                width: fieldWidth,
+                height: fieldHeight
+            )
+            let goalAreaRect = CGRect(
+                x: (width - pitchWidth) / 2,
+                y: 0,
+                width: pitchWidth,
+                height: goalAreaHeight
+            )
             let selected = selectedShot
 
-            ZStack(alignment: .top) {
-                ShotGoalNet()
-                    .frame(width: min(width * 0.32, 98), height: 34)
-                    .position(x: width / 2, y: 17)
+            ZStack(alignment: .topLeading) {
+                VStack(spacing: gap) {
+                    ShotGoalArea(
+                        targetX: selected.map { targetPoint(for: $0, in: fieldRect).x - goalAreaRect.minX },
+                        isGoal: selected.map { isGoal($0) } ?? false
+                    )
+                    .frame(width: pitchWidth, height: goalAreaHeight)
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
 
-                ZStack {
-                    ShotGrass()
-                    ShotPitchLines()
-                        .stroke(Color(red: 0.06, green: 0.13, blue: 0.08), lineWidth: 1.2)
+                    ZStack {
+                        ShotGrass()
+                        ShotPitchLines()
+                            .stroke(Color(red: 0.05, green: 0.11, blue: 0.07), lineWidth: 1.45)
+                    }
+                    .frame(width: fieldWidth, height: fieldHeight)
+                    .padding(fieldPadding)
+                    .background(Color(red: 0.27, green: 0.43, blue: 0.28))
+                    .clipShape(RoundedRectangle(cornerRadius: 0, style: .continuous))
                 }
-                .frame(width: width, height: fieldHeight)
-                .clipShape(RoundedRectangle(cornerRadius: 0, style: .continuous))
-                .position(x: width / 2, y: fieldTop + fieldHeight / 2)
+                .frame(width: pitchWidth)
+                .position(x: width / 2, y: (goalAreaHeight + gap + fieldHeight + fieldPadding * 2) / 2)
 
                 if let selected {
-                    let start = point(for: selected, width: width, height: fieldHeight, offsetY: fieldTop)
-                    let target = targetPoint(for: selected, width: width, offsetY: fieldTop)
+                    let start = point(for: selected, in: fieldRect)
+                    let target = targetPoint(for: selected, in: fieldRect)
                     Path { path in
                         path.move(to: start)
                         path.addLine(to: target)
                     }
-                    .stroke(Color.white.opacity(0.86), style: StrokeStyle(lineWidth: 1.3, dash: [3, 4]))
+                    .stroke(Color.white.opacity(0.88), style: StrokeStyle(lineWidth: 2.0, dash: [3, 5]))
                 }
 
                 ForEach(displayShots) { shot in
@@ -646,30 +681,31 @@ struct ShotMapBoard: View {
                         ShotDot(shot: shot, selected: shot.id == selected?.id)
                     }
                     .buttonStyle(.plain)
-                    .position(point(for: shot, width: width, height: fieldHeight, offsetY: fieldTop))
+                    .position(point(for: shot, in: fieldRect))
                 }
             }
         }
-        .frame(height: 292)
-        .background(Color.black.opacity(0.24))
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .frame(height: 370)
     }
 
-    private func point(for shot: ShotMapItem, width: CGFloat, height: CGFloat, offsetY: CGFloat) -> CGPoint {
+    private func point(for shot: ShotMapItem, in rect: CGRect) -> CGPoint {
         let rawX = clamp(shot.playerCoordinates?.x ?? 50)
         let rawY = clamp(shot.playerCoordinates?.y ?? 50)
-        let leftValue = shot.isHome == false ? 100 - rawY : rawY
-        let topValue = 100 - rawX
+        let leftValue = rawY
+        let topValue = rawX
         return CGPoint(
-            x: width * CGFloat(leftValue / 100),
-            y: offsetY + height * CGFloat(topValue / 100)
+            x: rect.minX + rect.width * CGFloat(leftValue / 100),
+            y: rect.minY + rect.height * CGFloat(topValue / 100)
         )
     }
 
-    private func targetPoint(for shot: ShotMapItem, width: CGFloat, offsetY: CGFloat) -> CGPoint {
-        let rawY = clamp(shot.goalMouthCoordinates?.y ?? 50)
-        let leftValue = shot.isHome == false ? 100 - rawY : rawY
-        return CGPoint(x: width * CGFloat(leftValue / 100), y: offsetY + 2)
+    private func targetPoint(for shot: ShotMapItem, in rect: CGRect) -> CGPoint {
+        let rawY = clamp(shot.goalMouthCoordinates?.y ?? shot.playerCoordinates?.y ?? 50)
+        return CGPoint(x: rect.minX + rect.width * CGFloat(rawY / 100), y: rect.minY)
+    }
+
+    private func isGoal(_ shot: ShotMapItem) -> Bool {
+        (shot.shotType ?? "").lowercased().contains("goal")
     }
 
     private func clamp(_ value: Double) -> Double {
@@ -680,11 +716,13 @@ struct ShotMapBoard: View {
 struct ShotGrass: View {
     var body: some View {
         GeometryReader { proxy in
-            VStack(spacing: 0) {
-                ForEach(0..<5, id: \.self) { index in
+            ZStack(alignment: .top) {
+                Color(red: 0.27, green: 0.43, blue: 0.28)
+                ForEach(0..<4, id: \.self) { index in
                     Rectangle()
-                        .fill(index.isMultiple(of: 2) ? Color(red: 0.27, green: 0.43, blue: 0.28) : Color(red: 0.31, green: 0.49, blue: 0.32))
-                        .frame(height: proxy.size.height / 5)
+                        .fill(index.isMultiple(of: 2) ? Color.clear : Color.white.opacity(0.06))
+                        .frame(height: proxy.size.height / 4)
+                        .offset(y: proxy.size.height * CGFloat(index) / 4)
                 }
             }
         }
@@ -697,14 +735,63 @@ struct ShotPitchLines: Shape {
         func y(_ value: CGFloat) -> CGFloat { rect.minY + rect.height * value / 100 }
 
         var path = Path()
-        path.addRect(CGRect(x: x(5), y: y(8), width: rect.width * 0.90, height: rect.height * 0.82))
-        path.move(to: CGPoint(x: x(50), y: y(8)))
-        path.addLine(to: CGPoint(x: x(50), y: y(90)))
-        path.addArc(center: CGPoint(x: x(50), y: y(90)), radius: rect.width * 0.12, startAngle: .degrees(180), endAngle: .degrees(0), clockwise: true)
-        path.addRect(CGRect(x: x(24), y: y(8), width: rect.width * 0.52, height: rect.height * 0.28))
-        path.addRect(CGRect(x: x(37), y: y(8), width: rect.width * 0.26, height: rect.height * 0.13))
-        path.addArc(center: CGPoint(x: x(5), y: y(8)), radius: rect.width * 0.04, startAngle: .degrees(0), endAngle: .degrees(90), clockwise: false)
-        path.addArc(center: CGPoint(x: x(95), y: y(8)), radius: rect.width * 0.04, startAngle: .degrees(180), endAngle: .degrees(90), clockwise: true)
+        path.addRect(rect.insetBy(dx: 0.75, dy: 0.75))
+        path.addRect(CGRect(x: x(20.36), y: y(0), width: rect.width * 0.5928, height: rect.height * 0.3238))
+        path.addRect(CGRect(x: x(36.43), y: y(0), width: rect.width * 0.2714, height: rect.height * 0.1143))
+        path.move(to: CGPoint(x: x(39.41), y: y(32.2)))
+        path.addQuadCurve(to: CGPoint(x: x(60.59), y: y(32.2)), control: CGPoint(x: x(50), y: y(43.2)))
+        path.addArc(center: CGPoint(x: x(50), y: y(100)), radius: rect.width * 0.13, startAngle: .degrees(180), endAngle: .degrees(0), clockwise: false)
+        path.addArc(center: CGPoint(x: x(0), y: y(0)), radius: rect.width * 0.045, startAngle: .degrees(0), endAngle: .degrees(90), clockwise: false)
+        path.addArc(center: CGPoint(x: x(100), y: y(0)), radius: rect.width * 0.045, startAngle: .degrees(180), endAngle: .degrees(90), clockwise: true)
+        return path
+    }
+}
+
+struct ShotGoalArea: View {
+    let targetX: CGFloat?
+    let isGoal: Bool
+
+    var body: some View {
+        GeometryReader { proxy in
+            let width = proxy.size.width
+            let height = proxy.size.height
+            let goalWidth = min(width * 0.30, 98)
+            let goalHeight: CGFloat = 35
+            let grassHeight: CGFloat = 18
+
+            ZStack(alignment: .topLeading) {
+                Color.black.opacity(0.30)
+                Rectangle()
+                    .fill(Color(red: 0.27, green: 0.43, blue: 0.28))
+                    .frame(height: grassHeight)
+                    .position(x: width / 2, y: height - grassHeight / 2)
+
+                ShotGoalNet()
+                    .frame(width: goalWidth, height: goalHeight)
+                    .position(x: width / 2, y: height - grassHeight - goalHeight / 2)
+
+                ShotGoalPerspective()
+                    .fill(Color.black.opacity(0.72))
+                    .frame(width: width * 0.81, height: 10)
+                    .position(x: width / 2, y: height - grassHeight + 5)
+
+                if let targetX {
+                    ShotGoalTarget(isGoal: isGoal)
+                        .position(x: min(max(targetX, 12), width - 12), y: height - grassHeight + 1)
+                }
+            }
+        }
+    }
+}
+
+struct ShotGoalPerspective: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX + rect.width * 0.11, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.maxX - rect.width * 0.11, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.maxX - rect.width * 0.01, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.minX + rect.width * 0.01, y: rect.minY))
+        path.closeSubpath()
         return path
     }
 }
@@ -712,17 +799,25 @@ struct ShotPitchLines: Shape {
 struct ShotGoalNet: View {
     var body: some View {
         ZStack {
-            Rectangle()
-                .stroke(Color.white.opacity(0.92), lineWidth: 3)
+            ShotOpenGoalFrame()
+                .stroke(Color.white.opacity(0.92), style: StrokeStyle(lineWidth: 3, lineCap: .square, lineJoin: .miter))
             GridPattern()
                 .stroke(Color.white.opacity(0.25), lineWidth: 0.8)
-                .padding(3)
+                .padding(.horizontal, 4)
+                .padding(.top, 4)
         }
         .background(Color.black.opacity(0.36))
-        .mask(
-            Rectangle()
-                .padding(.bottom, -6)
-        )
+    }
+}
+
+struct ShotOpenGoalFrame: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        return path
     }
 }
 
@@ -743,22 +838,42 @@ struct GridPattern: Shape {
     }
 }
 
+struct ShotGoalTarget: View {
+    let isGoal: Bool
+
+    var body: some View {
+        Circle()
+            .fill(isGoal ? Color.white : Color.white.opacity(0.72))
+            .frame(width: 16, height: 16)
+            .overlay(Circle().stroke(Color(red: 0.24, green: 0.78, blue: 0.32), lineWidth: 2))
+            .shadow(color: Color(red: 0.24, green: 0.78, blue: 0.32).opacity(isGoal ? 0.45 : 0), radius: 5)
+    }
+}
+
 struct ShotDot: View {
     let shot: ShotMapItem
     let selected: Bool
 
     var body: some View {
-        Circle()
-            .fill(fillColor)
-            .frame(width: selected ? 21 : 16, height: selected ? 21 : 16)
-            .overlay(Circle().stroke(borderColor, lineWidth: selected ? 3 : 2))
-            .shadow(color: borderColor.opacity(selected ? 0.45 : 0), radius: 4)
+        ZStack {
+            Circle()
+                .fill(fillColor)
+                .frame(width: selected ? 22 : 17, height: selected ? 22 : 17)
+                .overlay(Circle().stroke(borderColor, lineWidth: selected ? 3 : 1.6))
+                .shadow(color: borderColor.opacity(selected ? 0.45 : 0), radius: 5)
+
+            if isGoal || saved {
+                Circle()
+                    .fill(borderColor)
+                    .frame(width: selected ? 5 : 4, height: selected ? 5 : 4)
+            }
+        }
     }
 
     private var fillColor: Color {
         if isGoal { return .white }
-        if (shot.shotType ?? "").lowercased().contains("save") { return Color(red: 0.85, green: 0.94, blue: 0.84) }
-        return Color(red: 0.72, green: 0.86, blue: 0.70)
+        if saved { return Color(red: 0.85, green: 0.94, blue: 0.84) }
+        return Color.white.opacity(0.62)
     }
 
     private var borderColor: Color {
@@ -767,6 +882,10 @@ struct ShotDot: View {
 
     private var isGoal: Bool {
         (shot.shotType ?? "").lowercased().contains("goal")
+    }
+
+    private var saved: Bool {
+        (shot.shotType ?? "").lowercased().contains("save")
     }
 }
 
