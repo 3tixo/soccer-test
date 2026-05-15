@@ -139,7 +139,7 @@ struct SofaScoreService {
         let homeScore = scoreText(event.homeScore)
         let awayScore = scoreText(event.awayScore)
         let home = Competitor(
-            id: event.homeTeam?.id.map(String.init),
+            id: event.homeTeam.map { String($0.id) },
             homeAway: "home",
             score: homeScore,
             winner: event.winnerCode == 1,
@@ -147,7 +147,7 @@ struct SofaScoreService {
             records: nil
         )
         let away = Competitor(
-            id: event.awayTeam?.id.map(String.init),
+            id: event.awayTeam.map { String($0.id) },
             homeAway: "away",
             score: awayScore,
             winner: event.winnerCode == 2,
@@ -226,9 +226,9 @@ struct SofaScoreService {
         StandingStat(
             name: name,
             displayName: name,
-            displayValue: value.map(String.init),
-            summary: value.map(String.init),
-            value: value.map(Double.init)
+            displayValue: value.map { String($0) },
+            summary: value.map { String($0) },
+            value: value.map { Double($0) }
         )
     }
 
@@ -298,7 +298,7 @@ struct SofaScoreService {
             let playerName = incident.player?.shortName ?? incident.player?.name
             let text = incidentText(incident)
             return TimelineEvent(
-                id: incident.id.map(String.init) ?? "\(type)-\(incident.time ?? 0)-\(playerName ?? "")",
+                id: incident.id.map { String($0) } ?? "\(type)-\(incident.time ?? 0)-\(playerName ?? "")",
                 text: text,
                 shortText: text,
                 type: TimelineType(type: type, text: type.capitalized),
@@ -357,12 +357,14 @@ struct SofaScoreService {
         (players ?? []).map { player in
             RosterPlayer(
                 athlete: Athlete(
-                    id: player.player?.id.map(String.init),
+                    id: player.player.flatMap { sofaPlayer in
+                        sofaPlayer.id.map { String($0) }
+                    },
                     displayName: player.player?.name,
                     shortName: player.player?.shortName,
                     headshot: nil
                 ),
-                jersey: player.jerseyNumber ?? player.shirtNumber.map(String.init),
+                jersey: player.jerseyNumber ?? player.shirtNumber.map { String($0) },
                 starter: player.substitute == true ? false : true,
                 position: PlayerPosition(abbreviation: player.position ?? player.player?.position, displayName: player.position ?? player.player?.position),
                 formationPlace: player.formationPosition,
@@ -401,7 +403,7 @@ struct SofaScoreService {
             description: media.subtitle,
             images: media.thumbnailUrl.map { [ArticleImage(url: $0)] },
             links: media.url.map { ArticleLinks(web: ArticleLink(href: $0)) },
-            published: media.createdAtTimestamp.map { isoString(from: $0) }
+            published: media.createdAtTimestamp.flatMap { isoString(from: $0) }
         )
     }
 
@@ -421,7 +423,7 @@ struct SofaScoreService {
             description: article.description,
             images: article.thumbnailUrl.map { [ArticleImage(url: $0)] },
             links: article.externalUrl.map { ArticleLinks(web: ArticleLink(href: $0)) },
-            published: article.publishedAtTimestamp.map { isoString(from: $0) }
+            published: article.publishedAtTimestamp.flatMap { isoString(from: $0) }
         )
     }
 

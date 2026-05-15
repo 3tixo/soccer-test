@@ -218,8 +218,8 @@ private func teamName(_ team: [String: Any]) -> String {
 
 private func scoreText(_ score: [String: Any]?) -> String {
     score?["display"] as? String
-        ?? (score?["display"] as? Int).map(String.init)
-        ?? (score?["current"] as? Int).map(String.init)
+        ?? (score?["display"] as? Int).map { String($0) }
+        ?? (score?["current"] as? Int).map { String($0) }
         ?? "-"
 }
 
