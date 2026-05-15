@@ -15,4 +15,6 @@ struct MatchLiveActivityAttributes: ActivityAttributes {
     var leagueName: String
     var homeName: String
     var awayName: String
+    var homeLogoData: Data?
+    var awayLogoData: Data?
 }

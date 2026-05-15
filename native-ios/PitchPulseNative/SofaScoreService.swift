@@ -57,6 +57,11 @@ struct SofaScoreService {
         )
     }
 
+    func fetchEvent(eventId: String) async throws -> ScoreEvent? {
+        let response: SofaEventResponse = try await fetch("/event/\(eventId)")
+        return response.event.map(mapEvent)
+    }
+
     func fetchTeamProfile(leagueId: String, teamId: String) async throws -> Team? {
         let response: SofaTeamResponse = try await fetch("/team/\(teamId)")
         return response.team.map(mapTeam)

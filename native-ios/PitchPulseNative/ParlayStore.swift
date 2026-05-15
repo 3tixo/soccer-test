@@ -83,7 +83,7 @@ struct ParlayTicket: Identifiable, Codable, Hashable {
     var createdAt = Date()
 
     var totalMultiplier: Double {
-        legs.map { max($0.multiplier, 1) }.reduce(1, *)
+        legs.map { $0.status == .void ? 1 : max($0.multiplier, 1) }.reduce(1, *)
     }
 
     var potentialPayout: Double {
@@ -91,8 +91,9 @@ struct ParlayTicket: Identifiable, Codable, Hashable {
     }
 
     var status: ParlayLegStatus {
+        if !legs.isEmpty && legs.allSatisfy({ $0.status == .void }) { return .void }
         if legs.contains(where: { $0.status == .lost }) { return .lost }
-        if !legs.isEmpty && legs.allSatisfy({ $0.status == .hit || $0.status == .void }) { return .hit }
+        if !legs.isEmpty && legs.contains(where: { $0.status == .hit }) && legs.allSatisfy({ $0.status == .hit || $0.status == .void }) { return .hit }
         return .pending
     }
 
@@ -107,6 +108,7 @@ final class ParlayStore: ObservableObject {
 
     private let storageKey = "pulse.native.parlay.tickets"
     private let autoNotificationKey = "pulse.native.parlay.auto.notification.keys"
+    private let service = SofaScoreService()
 
     init() {
         load()
@@ -118,11 +120,26 @@ final class ParlayStore: ObservableObject {
     }
 
     func refresh(events: [ScoreEvent]) {
-        guard !events.isEmpty, !tickets.isEmpty else { return }
+        guard !tickets.isEmpty else { return }
+        Task {
+            await refreshAutomatically(seedEvents: events)
+        }
+    }
+
+    private func refreshAutomatically(seedEvents: [ScoreEvent]) async {
+        guard !tickets.isEmpty else { return }
         var eventsById: [String: ScoreEvent] = [:]
-        for event in events {
+        for event in seedEvents {
             eventsById[event.id] = event
         }
+
+        let missingEventIds = Set(tickets.flatMap(\.legs).filter { $0.status == .pending && eventsById[$0.eventId] == nil }.map(\.eventId))
+        for eventId in missingEventIds {
+            if let event = try? await service.fetchEvent(eventId: eventId) {
+                eventsById[eventId] = event
+            }
+        }
+
         var changedTickets: [ParlayTicket] = []
 
         for ticketIndex in tickets.indices {
@@ -227,6 +244,10 @@ final class ParlayStore: ObservableObject {
     }
 
     private func evaluatedStatus(for leg: ParlayLeg, event: ScoreEvent) -> ParlayLegStatus? {
+        if isVoidEvent(event) {
+            return .void
+        }
+
         guard let type = leg.type else { return nil }
         let teams = event.matchTeams
         guard let homeScore = Int(teams.home?.score ?? ""),
@@ -265,13 +286,25 @@ final class ParlayStore: ObservableObject {
     }
 
     private func sendAutoNotificationIfNeeded(for ticket: ParlayTicket) {
-        guard ticket.status == .hit || ticket.status == .lost else { return }
+        guard ticket.status == .hit || ticket.status == .lost || ticket.status == .void else { return }
         let key = "\(ticket.id.uuidString).\(ticket.status.rawValue)"
         var sent = autoNotificationKeys
         guard !sent.contains(key) else { return }
         sent.insert(key)
         autoNotificationKeys = sent
         sendStatusNotification(for: ticket)
+    }
+
+    private func isVoidEvent(_ event: ScoreEvent) -> Bool {
+        let text = [
+            event.status?.type?.description,
+            event.status?.type?.shortDetail
+        ]
+        .compactMap { $0 }
+        .joined(separator: " ")
+        .lowercased()
+
+        return text.contains("cancel") || text.contains("postpon") || text.contains("abandon") || text.contains("walkover")
     }
 
     private var autoNotificationKeys: Set<String> {

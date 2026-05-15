@@ -96,7 +96,7 @@ struct ParlayView: View {
             if !draftLegs.isEmpty {
                 VStack(spacing: 8) {
                     ForEach(draftLegs) { leg in
-                        parlayLegRow(leg, editable: false, ticketId: nil)
+                        parlayLegRow(leg)
                     }
                 }
             }
@@ -126,7 +126,7 @@ struct ParlayView: View {
             SectionTitle(kicker: "Tracking", title: "Saved Tickets")
 
             if store.tickets.isEmpty {
-                StateCard(title: "No tickets yet", detail: "Add a single pick or multiple legs, then update each leg as it hits or loses.")
+                StateCard(title: "No tickets yet", detail: "Add a single pick or multiple legs. Pulse checks saved legs from SofaScore scores automatically.")
             } else {
                 ForEach(store.tickets) { ticket in
                     ticketCard(ticket)
@@ -159,7 +159,7 @@ struct ParlayView: View {
             }
 
             ForEach(ticket.legs) { leg in
-                parlayLegRow(leg, editable: true, ticketId: ticket.id)
+                parlayLegRow(leg)
             }
 
             HStack(spacing: 10) {
@@ -196,7 +196,7 @@ struct ParlayView: View {
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
-    private func parlayLegRow(_ leg: ParlayLeg, editable: Bool, ticketId: UUID?) -> some View {
+    private func parlayLegRow(_ leg: ParlayLeg) -> some View {
         HStack(spacing: 10) {
             VStack(alignment: .leading, spacing: 3) {
                 Text(leg.matchName)
@@ -210,19 +210,7 @@ struct ParlayView: View {
             }
             Spacer()
 
-            if editable, let ticketId {
-                Picker("Status", selection: statusBinding(ticketId: ticketId, leg: leg)) {
-                    ForEach(ParlayLegStatus.allCases) { status in
-                        Text(status.rawValue).tag(status)
-                    }
-                }
-                .pickerStyle(.menu)
-                .tint(.white)
-            } else {
-                Text(leg.status.rawValue)
-                    .font(.caption.weight(.black))
-                    .foregroundStyle(.secondary)
-            }
+            statusPill(leg.status)
         }
         .padding(10)
         .background(Color.black.opacity(0.18))
@@ -236,19 +224,12 @@ struct ParlayView: View {
         )
     }
 
-    private func statusBinding(ticketId: UUID, leg: ParlayLeg) -> Binding<ParlayLegStatus> {
-        Binding(
-            get: { leg.status },
-            set: { store.updateLeg(ticketId: ticketId, legId: leg.id, status: $0) }
-        )
-    }
-
     private var canSave: Bool {
         !draftLegs.isEmpty && (Double(stake) ?? 0) > 0
     }
 
     private func addDraftLeg() {
-        guard let event = selectedEvent else { return }
+                    guard let event = selectedEvent else { return }
         let goalLine = Double(line)
         guard !legType.needsLine || goalLine != nil else { return }
         draftLegs.append(
@@ -276,6 +257,26 @@ struct ParlayView: View {
         )
         title = ""
         draftLegs = []
+        store.refresh(events: events)
+    }
+
+    private func statusPill(_ status: ParlayLegStatus) -> some View {
+        Text(status.rawValue.uppercased())
+            .font(.caption2.weight(.black))
+            .foregroundStyle(status == .pending ? .secondary : .white)
+            .padding(.horizontal, 8)
+            .frame(height: 24)
+            .background(statusColor(status))
+            .clipShape(Capsule())
+    }
+
+    private func statusColor(_ status: ParlayLegStatus) -> Color {
+        switch status {
+        case .pending: return Color.white.opacity(0.10)
+        case .hit: return Color.green.opacity(0.80)
+        case .lost: return Color.red.opacity(0.90)
+        case .void: return Color.gray.opacity(0.55)
+        }
     }
 
     private var defaultTicketTitle: String {

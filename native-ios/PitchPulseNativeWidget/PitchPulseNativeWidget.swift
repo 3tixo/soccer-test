@@ -648,10 +648,18 @@ struct PitchPulseLiveActivityWidget: Widget {
         } dynamicIsland: { context in
             DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
-                    LiveActivityTeamName(context.attributes.homeName, score: context.state.homeScore)
+                    LiveActivityTeamName(
+                        context.attributes.homeName,
+                        score: context.state.homeScore,
+                        logoData: context.attributes.homeLogoData
+                    )
                 }
                 DynamicIslandExpandedRegion(.trailing) {
-                    LiveActivityTeamName(context.attributes.awayName, score: context.state.awayScore)
+                    LiveActivityTeamName(
+                        context.attributes.awayName,
+                        score: context.state.awayScore,
+                        logoData: context.attributes.awayLogoData
+                    )
                 }
                 DynamicIslandExpandedRegion(.bottom) {
                     Text("\(context.attributes.leagueName) - \(context.state.detail)")
@@ -754,75 +762,108 @@ struct LiveActivityLockScreenView: View {
     let context: ActivityViewContext<MatchLiveActivityAttributes>
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
+        VStack(alignment: .leading, spacing: 11) {
+            HStack(alignment: .center, spacing: 10) {
                 Text(context.attributes.leagueName.uppercased())
-                    .font(.caption2.weight(.black))
+                    .font(.system(size: 13, weight: .black, design: .rounded))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
+                    .minimumScaleFactor(0.65)
                 Spacer()
                 Text(context.state.status)
-                    .font(.caption.weight(.black))
-                    .foregroundStyle(context.state.isLive ? .white : .secondary)
-                    .padding(.horizontal, 10)
-                    .frame(height: 24)
+                    .font(.system(size: 13, weight: .black, design: .rounded))
+                    .foregroundStyle(context.state.isLive ? .white : .white.opacity(0.74))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.65)
+                    .padding(.horizontal, 12)
+                    .frame(height: 28)
                     .background(context.state.isLive ? Color.red.opacity(0.90) : Color.white.opacity(0.10))
                     .clipShape(Capsule())
             }
 
-            scoreRow(name: context.attributes.homeName, score: context.state.homeScore)
+            scoreRow(
+                name: context.attributes.homeName,
+                score: context.state.homeScore,
+                logoData: context.attributes.homeLogoData
+            )
             Divider()
-                .overlay(Color.white.opacity(0.08))
-            scoreRow(name: context.attributes.awayName, score: context.state.awayScore)
+                .overlay(Color.white.opacity(0.10))
+            scoreRow(
+                name: context.attributes.awayName,
+                score: context.state.awayScore,
+                logoData: context.attributes.awayLogoData
+            )
 
             Text(context.state.detail)
-                .font(.caption.weight(.semibold))
+                .font(.system(size: 15, weight: .semibold, design: .rounded))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
+                .minimumScaleFactor(0.70)
         }
-        .padding(16)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
         .activityBackgroundTint(Color(red: 0.02, green: 0.022, blue: 0.026))
         .activitySystemActionForegroundColor(.white)
     }
 
-    private func scoreRow(name: String, score: String) -> some View {
+    private func scoreRow(name: String, score: String, logoData: Data?) -> some View {
         HStack(spacing: 10) {
+            TeamLogoMark(data: logoData, fallback: activityInitials(name), size: 29)
+
             Text(name)
                 .font(.system(size: 22, weight: .black, design: .rounded))
                 .foregroundStyle(.white)
                 .lineLimit(1)
-                .minimumScaleFactor(0.55)
+                .minimumScaleFactor(0.48)
             Spacer(minLength: 8)
             Text(score)
-                .font(.system(size: 31, weight: .black, design: .rounded))
+                .font(.system(size: 34, weight: .black, design: .rounded))
                 .foregroundStyle(.white)
                 .monospacedDigit()
                 .lineLimit(1)
+                .minimumScaleFactor(0.72)
+                .frame(minWidth: 42, alignment: .trailing)
         }
+        .frame(height: 44)
     }
 }
 
 struct LiveActivityTeamName: View {
     let name: String
     let score: String
+    let logoData: Data?
 
-    init(_ name: String, score: String) {
+    init(_ name: String, score: String, logoData: Data?) {
         self.name = name
         self.score = score
+        self.logoData = logoData
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(name)
-                .font(.caption2.weight(.black))
-                .lineLimit(1)
-                .minimumScaleFactor(0.45)
-                .frame(maxWidth: 74, alignment: .leading)
+            HStack(spacing: 4) {
+                TeamLogoMark(data: logoData, fallback: activityInitials(name), size: 15)
+                Text(name)
+                    .font(.caption2.weight(.black))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.42)
+            }
+            .frame(maxWidth: 72, alignment: .leading)
             Text(score)
                 .font(.headline.weight(.black))
                 .monospacedDigit()
         }
+        .frame(maxWidth: 76, alignment: .leading)
     }
+}
+
+private func activityInitials(_ value: String) -> String {
+    let words = value.split(separator: " ")
+    let letters = words.prefix(2).compactMap { $0.first }
+    if letters.isEmpty {
+        return String(value.prefix(2)).uppercased()
+    }
+    return String(letters).uppercased()
 }
 
 @main
