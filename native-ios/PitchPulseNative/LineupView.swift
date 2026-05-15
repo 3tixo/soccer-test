@@ -64,7 +64,7 @@ struct TeamLineupHalf: View {
     var body: some View {
         ZStack(alignment: group.homeAway == "home" ? .bottomLeading : .topLeading) {
             VStack(spacing: 0) {
-                ForEach(rows) { row in
+                ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
                     FormationLine(row: row, reversePlayers: group.homeAway == "away", team: group.team)
                 }
             }
@@ -98,7 +98,7 @@ struct FormationLine: View {
 
     var body: some View {
         HStack(alignment: .top) {
-            ForEach(Array(players.enumerated()), id: \.element.id) { index, player in
+            ForEach(Array(players.enumerated()), id: \.offset) { index, player in
                 PlayerNode(
                     player: player,
                     position: positionLabel(for: player, rowLine: row.line, index: index, count: players.count),
@@ -207,7 +207,7 @@ struct BenchList: View {
                 }
                 .font(.caption.weight(.black))
 
-                ForEach(bench) { player in
+                ForEach(Array(bench.enumerated()), id: \.offset) { _, player in
                     HStack(spacing: 10) {
                         Text(player.jersey ?? "-")
                             .font(.caption.weight(.black))

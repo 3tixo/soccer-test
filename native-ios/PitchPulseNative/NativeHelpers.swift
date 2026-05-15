@@ -44,10 +44,21 @@ extension GameStatistic {
 }
 
 func statMap(_ stats: [GameStatistic]?) -> [String: GameStatistic] {
-    Dictionary(uniqueKeysWithValues: (stats ?? []).compactMap { stat in
-        guard let name = stat.name else { return nil }
-        return (name, stat)
-    })
+    var mapped: [String: GameStatistic] = [:]
+    for stat in stats ?? [] {
+        guard let name = stat.name else { continue }
+        mapped[name] = stat
+    }
+    return mapped
+}
+
+func standingStatMap(_ stats: [StandingStat]?) -> [String: StandingStat] {
+    var mapped: [String: StandingStat] = [:]
+    for stat in stats ?? [] {
+        guard let name = stat.name else { continue }
+        mapped[name] = stat
+    }
+    return mapped
 }
 
 func displayValue(_ stat: GameStatistic, suffix: String = "") -> String {

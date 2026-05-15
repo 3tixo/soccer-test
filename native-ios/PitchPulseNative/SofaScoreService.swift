@@ -453,6 +453,7 @@ final class ScoreboardViewModel: ObservableObject {
     @Published var errorMessage: String?
 
     private let service = SofaScoreService()
+    private var loadGeneration = 0
 
     var isToday: Bool {
         Calendar.current.isDateInToday(selectedDate)
@@ -489,19 +490,19 @@ final class ScoreboardViewModel: ObservableObject {
         selectedLeague = league
         hasUserPickedDate = false
         searchText = ""
-        await load(useProviderDefaultDate: true)
+        await load(useProviderDefaultDate: true, preserveExisting: false)
     }
 
     func shiftDate(by days: Int) async {
         selectedDate = Calendar.current.date(byAdding: .day, value: days, to: selectedDate) ?? selectedDate
         hasUserPickedDate = true
-        await load(useProviderDefaultDate: false)
+        await load(useProviderDefaultDate: false, preserveExisting: false)
     }
 
     func goToToday() async {
         selectedDate = Date()
         hasUserPickedDate = true
-        await load(useProviderDefaultDate: false)
+        await load(useProviderDefaultDate: false, preserveExisting: false)
     }
 
     func teamContext(for team: Team?) -> TeamDetailContext? {
@@ -522,53 +523,100 @@ final class ScoreboardViewModel: ObservableObject {
         return TeamDetailContext(team: team, standing: standing, events: teamEvents, articles: teamArticles)
     }
 
-    func load(useProviderDefaultDate: Bool? = nil) async {
+    func load(useProviderDefaultDate: Bool? = nil, preserveExisting: Bool = true) async {
+        loadGeneration += 1
+        let generation = loadGeneration
+        let league = selectedLeague
+        let date = selectedDate
+        let service = self.service
         isLoading = true
+        defer {
+            if generation == loadGeneration {
+                isLoading = false
+            }
+        }
         errorMessage = nil
         let shouldUseDefaultDate = useProviderDefaultDate ?? !hasUserPickedDate
 
-        async let scoreboardResult = service.fetchScoreboard(
-            leagueId: selectedLeague.id,
-            date: selectedDate,
-            useProviderDefaultDate: shouldUseDefaultDate
-        )
-        async let standingResult = service.fetchStandings(leagueId: selectedLeague.id)
-        async let newsResult = service.fetchNews(leagueId: selectedLeague.id)
+        async let scoreboardResult: Result<ScoreboardResponse, Error> = captureProviderResult {
+            try await service.fetchScoreboard(
+                leagueId: league.id,
+                date: date,
+                useProviderDefaultDate: shouldUseDefaultDate
+            )
+        }
+        async let standingResult: Result<[StandingEntry], Error> = captureProviderResult {
+            try await service.fetchStandings(leagueId: league.id)
+        }
+        async let newsResult: Result<[NewsArticle], Error> = captureProviderResult {
+            try await service.fetchNews(leagueId: league.id)
+        }
 
-        do {
-            let scoreboard = try await scoreboardResult
+        let scoreboardOutcome = await scoreboardResult
+        let standingsOutcome = await standingResult
+        let newsOutcome = await newsResult
+
+        guard generation == loadGeneration else { return }
+
+        var primaryError: Error?
+
+        switch scoreboardOutcome {
+        case .success(let scoreboard):
             events = scoreboard.events ?? []
             if shouldUseDefaultDate, let providerDate = SofaScoreService.dateFromAPIDay(scoreboard.day?.date) {
                 selectedDate = providerDate
             }
-            standings = try await standingResult
-            articles = try await newsResult
-        } catch ProviderError.providerBlocked {
-            errorMessage = "SofaScore blocked this client request. The private API may need a backend proxy."
-            events = []
-            standings = []
-            articles = []
-        } catch {
-            errorMessage = "Could not load all SofaScore data."
-            do {
-                events = try await service.fetchScoreboard(leagueId: selectedLeague.id, date: selectedDate, useProviderDefaultDate: shouldUseDefaultDate).events ?? []
-            } catch {
+        case .failure(let error):
+            primaryError = error
+            if !preserveExisting {
                 events = []
             }
-            do {
-                standings = try await service.fetchStandings(leagueId: selectedLeague.id)
-            } catch {
+        }
+
+        switch standingsOutcome {
+        case .success(let loadedStandings):
+            standings = loadedStandings
+        case .failure:
+            if !preserveExisting {
                 standings = []
             }
-            do {
-                articles = try await service.fetchNews(leagueId: selectedLeague.id)
-            } catch {
+        }
+
+        switch newsOutcome {
+        case .success(let loadedArticles):
+            articles = loadedArticles
+        case .failure:
+            if !preserveExisting {
                 articles = []
             }
         }
 
-        isLoading = false
+        if let primaryError, events.isEmpty {
+            if isProviderBlocked(primaryError) {
+                errorMessage = "SofaScore blocked this client request. The private API may need a backend proxy."
+            } else {
+                errorMessage = "Could not load SofaScore matches."
+            }
+        } else {
+            errorMessage = nil
+        }
+
     }
+}
+
+private func captureProviderResult<T>(_ operation: () async throws -> T) async -> Result<T, Error> {
+    do {
+        return .success(try await operation())
+    } catch {
+        return .failure(error)
+    }
+}
+
+private func isProviderBlocked(_ error: Error) -> Bool {
+    if case ProviderError.providerBlocked = error {
+        return true
+    }
+    return false
 }
 
 extension ScoreEvent {

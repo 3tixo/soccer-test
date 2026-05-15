@@ -13,10 +13,7 @@ struct TeamDetailView: View {
     private let service = SofaScoreService()
 
     private var standingStats: [String: StandingStat] {
-        Dictionary(uniqueKeysWithValues: (context.standing?.stats ?? []).compactMap { stat in
-            guard let name = stat.name else { return nil }
-            return (name, stat)
-        })
+        standingStatMap(context.standing?.stats)
     }
 
     var body: some View {
@@ -153,7 +150,7 @@ struct TeamDetailView: View {
                 StateCard(title: "No team media", detail: "No loaded SofaScore media matched this club.")
             } else {
                 VStack(spacing: 10) {
-                    ForEach(loadedArticles.prefix(4)) { article in
+                    ForEach(Array(loadedArticles.prefix(4).enumerated()), id: \.offset) { _, article in
                         NewsCard(article: article)
                     }
                 }

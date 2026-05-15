@@ -112,7 +112,7 @@ struct MatchDetailView: View {
                 StateCard(title: "No timeline yet", detail: "SofaScore has not published match events for this fixture.")
             } else {
                 VStack(spacing: 0) {
-                    ForEach(events, id: \.stableId) { item in
+                    ForEach(Array(events.enumerated()), id: \.offset) { _, item in
                         TimelineRow(event: item)
                     }
                 }
@@ -176,7 +176,7 @@ struct MatchDetailView: View {
                 StateCard(title: "No stats yet", detail: "Stats appear when SofaScore publishes official match data.")
             } else {
                 VStack(spacing: 12) {
-                    ForEach(rows) { row in
+                    ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
                         MatchStatRow(row: row)
                     }
                 }
@@ -197,7 +197,7 @@ struct MatchDetailView: View {
                 EmptyView()
             } else {
                 VStack(spacing: 10) {
-                    ForEach(articles) { article in
+                    ForEach(Array(articles.enumerated()), id: \.offset) { _, article in
                         NewsCard(article: article)
                     }
                 }
@@ -389,12 +389,13 @@ struct TimelineRow: View {
 }
 
 struct MatchStatItem: Identifiable {
-    let id = UUID()
     let label: String
     let home: String
     let away: String
     let homeValue: Double
     let awayValue: Double
+
+    var id: String { label }
 }
 
 struct MatchStatRow: View {

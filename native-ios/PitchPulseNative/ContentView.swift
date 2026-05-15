@@ -321,7 +321,7 @@ struct ContentView: View {
                 StateCard(title: "No news available", detail: "SofaScore did not return matching media.")
             } else {
                 LazyVStack(spacing: 10) {
-                    ForEach(viewModel.filteredArticles.prefix(12)) { article in
+                    ForEach(Array(viewModel.filteredArticles.prefix(12).enumerated()), id: \.offset) { _, article in
                         NewsCard(article: article)
                     }
                 }
@@ -488,10 +488,7 @@ struct StandingRow: View {
     let isFavorite: Bool
 
     private var stats: [String: StandingStat] {
-        Dictionary(uniqueKeysWithValues: (entry.stats ?? []).compactMap { stat in
-            guard let name = stat.name else { return nil }
-            return (name, stat)
-        })
+        standingStatMap(entry.stats)
     }
 
     var body: some View {

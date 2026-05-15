@@ -78,7 +78,7 @@ struct Competitor: Decodable, Identifiable {
     let records: [TeamRecord]?
 
     var stableId: String {
-        id ?? team?.id ?? "\(homeAway ?? "team")-\(team?.displayName ?? UUID().uuidString)"
+        id ?? team?.stableId ?? "\(homeAway ?? "team")-\(team?.bestName ?? "unknown")"
     }
 
     enum CodingKeys: String, CodingKey {
@@ -189,7 +189,7 @@ struct Team: Decodable {
     }
 
     var stableId: String {
-        id ?? displayName ?? shortDisplayName ?? name ?? UUID().uuidString
+        id ?? displayName ?? shortDisplayName ?? name ?? abbreviation ?? "unknown-team"
     }
 }
 
@@ -221,7 +221,7 @@ struct StandingEntry: Decodable, Identifiable {
     let note: StandingNote?
 
     var id: String {
-        team?.id ?? team?.displayName ?? UUID().uuidString
+        team?.stableId ?? note?.description ?? "standing-entry"
     }
 }
 
@@ -284,7 +284,7 @@ struct NewsArticle: Identifiable, Decodable {
     let published: String?
 
     var id: String {
-        links?.web?.href ?? headline ?? UUID().uuidString
+        links?.web?.href ?? [headline, published, description].compactMap { $0 }.joined(separator: "-")
     }
 }
 
@@ -462,7 +462,7 @@ struct RosterGroup: Decodable, Identifiable {
     let roster: [RosterPlayer]?
 
     var id: String {
-        "\(homeAway ?? "side")-\(team?.stableId ?? UUID().uuidString)"
+        "\(homeAway ?? "side")-\(team?.stableId ?? formation ?? "unknown")"
     }
 }
 
