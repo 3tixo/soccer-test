@@ -1,10 +1,11 @@
+import Foundation
 import SwiftUI
 
 struct ContentView: View {
     @StateObject private var viewModel = ScoreboardViewModel()
     @StateObject private var alertManager = MatchAlertManager()
     @StateObject private var favoriteStore = FavoriteStore()
-    @State private var selectedEvent: ScoreEvent?
+    @State private var selectedMatch: SelectedMatch?
     @State private var selectedTeam: TeamDetailContext?
     @State private var favoritesOnly = false
 
@@ -41,8 +42,8 @@ struct ContentView: View {
                 await viewModel.load()
                 alertManager.refresh(events: viewModel.events, league: viewModel.selectedLeague)
             }
-            .sheet(item: $selectedEvent) { event in
-                MatchDetailView(event: event, league: viewModel.selectedLeague)
+            .sheet(item: $selectedMatch) { selection in
+                MatchDetailView(event: selection.event, league: selection.league)
                     .presentationDetents([.large])
                     .presentationDragIndicator(.visible)
             }
@@ -276,9 +277,9 @@ struct ContentView: View {
                 StateCard(title: "No matches", detail: "SofaScore did not return matching fixtures.")
             } else {
                 LazyVStack(spacing: 10) {
-                    ForEach(visibleEvents) { event in
+                    ForEach(Array(visibleEvents.enumerated()), id: \.offset) { _, event in
                         Button {
-                            selectedEvent = event
+                            selectedMatch = SelectedMatch(event: event, league: viewModel.selectedLeague)
                         } label: {
                             MatchCard(event: event, favoriteStore: favoriteStore)
                         }
@@ -341,6 +342,12 @@ struct ContentView: View {
         guard favoritesOnly else { return viewModel.filteredEvents }
         return viewModel.filteredEvents.filter { favoriteStore.eventContainsFavorite($0) }
     }
+}
+
+struct SelectedMatch: Identifiable {
+    let id = UUID()
+    let event: ScoreEvent
+    let league: League
 }
 
 struct SectionTitle: View {

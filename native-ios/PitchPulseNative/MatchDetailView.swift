@@ -1,5 +1,6 @@
 import SwiftUI
 
+@MainActor
 struct MatchDetailView: View {
     let event: ScoreEvent
     let league: League
@@ -37,7 +38,7 @@ struct MatchDetailView: View {
             }
             .scrollIndicators(.hidden)
         }
-        .task {
+        .task(id: event.id) {
             await loadSummary()
         }
     }
@@ -243,8 +244,12 @@ struct MatchDetailView: View {
             return []
         }
 
-        let homeStats = statMap(teams[0].statistics)
-        let awayStats = statMap(teams[1].statistics)
+        guard let homeTeam = teams.first, let awayTeam = teams.dropFirst().first else {
+            return []
+        }
+
+        let homeStats = statMap(homeTeam.statistics)
+        let awayStats = statMap(awayTeam.statistics)
         let definitions = [
             ("Expected goals", "expectedGoals", ""),
             ("Possession", "ballPossession", ""),
@@ -286,17 +291,26 @@ struct MatchDetailView: View {
     }
 
     private func loadSummary() async {
+        let leagueId = league.id
+        let eventId = event.id
+        let service = self.service
+
         isLoading = true
         errorMessage = nil
 
         do {
-            summary = try await service.fetchSummary(leagueId: league.id, eventId: event.id)
+            let loadedSummary = try await service.fetchSummary(leagueId: leagueId, eventId: eventId)
+            guard !Task.isCancelled else { return }
+            summary = loadedSummary
         } catch ProviderError.providerBlocked {
+            guard !Task.isCancelled else { return }
             errorMessage = "SofaScore blocked this client request. This may need a backend proxy."
         } catch {
+            guard !Task.isCancelled else { return }
             errorMessage = "SofaScore did not return summary data for this match."
         }
 
+        guard !Task.isCancelled else { return }
         isLoading = false
     }
 }
